@@ -37,6 +37,24 @@
 	}
 
 	/* ----------------------------------------------------------------- */
+	/* Mode-specific settings rows                                        */
+	/* ----------------------------------------------------------------- */
+
+	function applyMode() {
+		var select = document.getElementById( 'advtn-mode' );
+		if ( ! select ) {
+			return;
+		}
+
+		var mode = select.value;
+
+		document.querySelectorAll( '.advtn-mode-row' ).forEach( function ( row ) {
+			var modes = ( row.dataset.modes || '' ).split( /\s+/ );
+			row.hidden = modes.indexOf( mode ) === -1;
+		} );
+	}
+
+	/* ----------------------------------------------------------------- */
 	/* Ordering                                                           */
 	/* ----------------------------------------------------------------- */
 
@@ -161,6 +179,13 @@
 	/* ----------------------------------------------------------------- */
 
 	ready( function () {
+		applyMode();
+
+		var modeSelect = document.getElementById( 'advtn-mode' );
+		if ( modeSelect ) {
+			modeSelect.addEventListener( 'change', applyMode );
+		}
+
 		var container = document.getElementById( 'advtn-sources' );
 
 		if ( container ) {
@@ -247,6 +272,18 @@
 				}
 			} );
 		} );
+
+		// Only confirm the destructive import strategy, not every import.
+		var importForm = document.querySelector( '.advtn-portability__import' );
+		if ( importForm ) {
+			importForm.addEventListener( 'submit', function ( event ) {
+				var replace = importForm.querySelector( 'input[name="advtn_import_mode"][value="replace"]' );
+
+				if ( replace && replace.checked && ! window.confirm( settings.i18n.replace ) ) {
+					event.preventDefault();
+				}
+			} );
+		}
 
 		document.querySelectorAll( '.advtn-copy' ).forEach( function ( button ) {
 			button.addEventListener( 'click', function () {

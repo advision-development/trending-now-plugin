@@ -111,6 +111,14 @@
 	font-size: 12px;
 }
 
+/* The display rules above and below beat the user-agent [hidden] rule, so the
+   type-specific and mode-specific fields need this to actually disappear. */
+.advtn-admin [hidden],
+.advtn-source__grid label[hidden],
+.advtn-source__grid .advtn-check[hidden] {
+	display: none !important;
+}
+
 .advtn-source__grid label > span {
 	font-weight: 600;
 }
@@ -149,6 +157,31 @@
 .advtn-delete {
 	font-size: 12px;
 	color: #b32d2e;
+}
+
+/* Import / export */
+
+.advtn-portability {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+	gap: 1em;
+	align-items: start;
+	max-width: 1100px;
+}
+
+.advtn-portability > form {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: .5em 1.25em 1em;
+}
+
+.advtn-portability h3 {
+	margin: .75em 0 .25em;
+}
+
+.advtn-portability fieldset label {
+	font-size: 13px;
 }
 
 .advtn-test-result {

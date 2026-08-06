@@ -16,6 +16,13 @@ final class ADVTN_Admin {
 	public const MENU_SLUG  = 'trending-now';
 	public const CAPABILITY = 'manage_options';
 
+	/** Envelope identifiers for the sources export format. */
+	public const EXPORT_SCHEMA  = 'advtn.sources';
+	public const EXPORT_VERSION = 1;
+
+	/** Ceiling on an imported payload. A source list is never this big. */
+	public const IMPORT_MAX_BYTES = 1048576;
+
 	/**
 	 * Settings service.
 	 *
@@ -52,6 +59,8 @@ final class ADVTN_Admin {
 		add_action( 'admin_post_advtn_save_settings', array( $this, 'handle_save_settings' ) );
 		add_action( 'admin_post_advtn_save_sources', array( $this, 'handle_save_sources' ) );
 		add_action( 'admin_post_advtn_action', array( $this, 'handle_action' ) );
+		add_action( 'admin_post_advtn_export_sources', array( $this, 'handle_export_sources' ) );
+		add_action( 'admin_post_advtn_import_sources', array( $this, 'handle_import_sources' ) );
 		add_action( 'wp_ajax_advtn_test_fetch', array( $this, 'ajax_test_fetch' ) );
 		add_action( 'admin_notices', array( $this, 'stale_ingest_notice' ) );
 	}
@@ -98,6 +107,7 @@ final class ADVTN_Admin {
 					'testFetch' => __( 'Test fetch', 'trending-now' ),
 					'failed'    => __( 'Request failed.', 'trending-now' ),
 					'confirm'   => __( 'Are you sure?', 'trending-now' ),
+					'replace'   => __( 'Replace discards every source currently configured on this site. Continue?', 'trending-now' ),
 				),
 			)
 		);
@@ -258,6 +268,201 @@ final class ADVTN_Admin {
 		}
 
 		$this->redirect( 'sources', 'saved' );
+	}
+
+	/**
+	 * Stream the configured sources as a JSON download.
+	 *
+	 * @return void
+	 */
+	public function handle_export_sources(): void {
+		$this->guard( 'advtn_export_sources' );
+
+		$payload = array(
+			'schema'      => self::EXPORT_SCHEMA,
+			'version'     => self::EXPORT_VERSION,
+			'exported_at' => gmdate( 'c' ),
+			'site'        => home_url( '/' ),
+			'sources'     => $this->settings->sources(),
+		);
+
+		$filename = sprintf( 'trending-now-sources-%s.json', gmdate( 'Ymd-His' ) );
+
+		nocache_headers();
+		header( 'Content-Type: application/json; charset=utf-8' );
+		header( 'Content-Disposition: attachment; filename=' . $filename );
+
+		echo wp_json_encode( $payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+		exit;
+	}
+
+	/**
+	 * Import sources from an uploaded file or pasted JSON.
+	 *
+	 * @return void
+	 */
+	public function handle_import_sources(): void {
+		$this->guard( 'advtn_import_sources' );
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
+		$strategy = isset( $_POST['advtn_import_mode'] ) ? sanitize_key( wp_unslash( $_POST['advtn_import_mode'] ) ) : 'merge';
+		$strategy = in_array( $strategy, array( 'merge', 'replace' ), true ) ? $strategy : 'merge';
+
+		$raw = $this->read_import_payload();
+
+		if ( is_wp_error( $raw ) ) {
+			set_transient( 'advtn_admin_errors', array( $raw->get_error_message() ), 60 );
+			$this->redirect( 'sources', 'import_failed' );
+		}
+
+		$decoded = json_decode( (string) $raw, true );
+
+		if ( ! is_array( $decoded ) ) {
+			set_transient( 'advtn_admin_errors', array( __( 'That file is not valid JSON.', 'trending-now' ) ), 60 );
+			$this->redirect( 'sources', 'import_failed' );
+		}
+
+		// Accept either a full export envelope or a bare array of rows.
+		$rows = isset( $decoded['sources'] ) && is_array( $decoded['sources'] ) ? $decoded['sources'] : $decoded;
+
+		if ( empty( $rows ) || ! is_array( $rows ) ) {
+			set_transient( 'advtn_admin_errors', array( __( 'No sources found in that file.', 'trending-now' ) ), 60 );
+			$this->redirect( 'sources', 'import_failed' );
+		}
+
+		$imported = array();
+		$errors   = array();
+
+		foreach ( $rows as $index => $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+
+			$provider = advtn()->source( (string) ( $row['type'] ?? '' ) );
+
+			if ( null === $provider ) {
+				/* translators: 1: row number, 2: source type key. */
+				$errors[] = sprintf( __( 'Row %1$d: unknown source type "%2$s".', 'trending-now' ), (int) $index + 1, (string) ( $row['type'] ?? '' ) );
+				continue;
+			}
+
+			$validated = $provider->validate_config( $row );
+
+			if ( is_wp_error( $validated ) ) {
+				/* translators: 1: row number or label, 2: error message. */
+				$errors[] = sprintf( __( 'Row %1$s: %2$s', 'trending-now' ), (string) ( $row['label'] ?? (string) ( (int) $index + 1 ) ), $validated->get_error_message() );
+				continue;
+			}
+
+			$imported[] = $validated;
+		}
+
+		if ( empty( $imported ) ) {
+			$errors[] = __( 'Nothing was imported.', 'trending-now' );
+			set_transient( 'advtn_admin_errors', $errors, 60 );
+			$this->redirect( 'sources', 'import_failed' );
+		}
+
+		$final = 'replace' === $strategy ? $imported : $this->merge_sources( $this->settings->sources(), $imported );
+
+		$this->settings->save_sources( $final );
+		$this->settings->prune_state();
+
+		set_transient(
+			'advtn_admin_summary',
+			sprintf(
+				/* translators: 1: number of rows imported, 2: merge or replace, 3: resulting total. */
+				__( 'Imported %1$d source(s) using "%2$s". The list now has %3$d.', 'trending-now' ),
+				count( $imported ),
+				$strategy,
+				count( $final )
+			),
+			60
+		);
+
+		if ( ! empty( $errors ) ) {
+			set_transient( 'advtn_admin_errors', $errors, 60 );
+		}
+
+		ADVTN_Logger::log(
+			'info',
+			'Sources imported.',
+			array(
+				'imported' => count( $imported ),
+				'strategy' => $strategy,
+				'rejected' => count( $errors ),
+			)
+		);
+
+		$this->redirect( 'sources', empty( $errors ) ? 'imported' : 'partial' );
+	}
+
+	/**
+	 * Overlay imported rows onto the existing list, matching on id.
+	 *
+	 * @param array<int,array<string,mixed>> $existing Current rows.
+	 * @param array<int,array<string,mixed>> $incoming Validated imported rows.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function merge_sources( array $existing, array $incoming ): array {
+		$by_id = array();
+
+		foreach ( $existing as $row ) {
+			$by_id[ (string) ( $row['id'] ?? '' ) ] = $row;
+		}
+
+		foreach ( $incoming as $row ) {
+			$by_id[ (string) ( $row['id'] ?? '' ) ] = $row;
+		}
+
+		unset( $by_id[''] );
+
+		return array_values( $by_id );
+	}
+
+	/**
+	 * Pull the import JSON from the upload or the textarea.
+	 *
+	 * @return string|WP_Error
+	 */
+	private function read_import_payload() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
+		$file = isset( $_FILES['advtn_import_file'] ) ? $_FILES['advtn_import_file'] : null;
+
+		if ( is_array( $file ) && ! empty( $file['tmp_name'] ) && UPLOAD_ERR_NO_FILE !== (int) ( $file['error'] ?? UPLOAD_ERR_NO_FILE ) ) {
+			if ( UPLOAD_ERR_OK !== (int) $file['error'] ) {
+				return new WP_Error( 'advtn_upload_failed', __( 'The upload did not complete.', 'trending-now' ) );
+			}
+
+			$tmp = (string) $file['tmp_name'];
+
+			if ( ! is_uploaded_file( $tmp ) ) {
+				return new WP_Error( 'advtn_bad_upload', __( 'That upload could not be verified.', 'trending-now' ) );
+			}
+
+			if ( (int) ( $file['size'] ?? 0 ) > self::IMPORT_MAX_BYTES ) {
+				return new WP_Error( 'advtn_upload_too_large', __( 'That file is too large to be a source list.', 'trending-now' ) );
+			}
+
+			$contents = file_get_contents( $tmp ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local upload temp file, not a remote fetch.
+
+			return false === $contents
+				? new WP_Error( 'advtn_upload_unreadable', __( 'That file could not be read.', 'trending-now' ) )
+				: $contents;
+		}
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
+		$pasted = isset( $_POST['advtn_import_json'] ) ? trim( (string) wp_unslash( $_POST['advtn_import_json'] ) ) : '';
+
+		if ( '' === $pasted ) {
+			return new WP_Error( 'advtn_no_import', __( 'Choose a file or paste some JSON first.', 'trending-now' ) );
+		}
+
+		if ( strlen( $pasted ) > self::IMPORT_MAX_BYTES ) {
+			return new WP_Error( 'advtn_paste_too_large', __( 'That payload is too large to be a source list.', 'trending-now' ) );
+		}
+
+		return $pasted;
 	}
 
 	/**
@@ -440,6 +645,8 @@ final class ADVTN_Admin {
 			'loopback_ok'        => array( 'success', __( 'Loopback request succeeded.', 'trending-now' ) ),
 			'loopback_failed'    => array( 'error', __( 'Loopback request failed. Action Scheduler cannot run on this host until that is fixed.', 'trending-now' ) ),
 			'secret_regenerated' => array( 'success', __( 'Secret regenerated. Update any external caller.', 'trending-now' ) ),
+			'imported'           => array( 'success', __( 'Sources imported.', 'trending-now' ) ),
+			'import_failed'      => array( 'error', __( 'Import failed. Nothing was changed.', 'trending-now' ) ),
 		);
 
 		if ( isset( $messages[ $notice ] ) ) {
@@ -448,6 +655,12 @@ final class ADVTN_Admin {
 				esc_attr( $messages[ $notice ][0] ),
 				esc_html( $messages[ $notice ][1] )
 			);
+		}
+
+		$summary = get_transient( 'advtn_admin_summary' );
+		if ( is_string( $summary ) && '' !== $summary ) {
+			delete_transient( 'advtn_admin_summary' );
+			printf( '<div class="notice notice-info"><p>%s</p></div>', esc_html( $summary ) );
 		}
 
 		$errors = get_transient( 'advtn_admin_errors' );

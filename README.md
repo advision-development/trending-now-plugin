@@ -29,9 +29,17 @@ back to plain WP-Cron; the Diagnostics tab says which runner is active.
 ## Configure
 
 **Trending Now → Settings** covers mode, display, rotation, retention, links, archive,
-scheduling and security. **Sources** is a repeatable list with a per-row *Test fetch*
-button that runs a live fetch and shows the first three normalized items without writing
-to the database. **Diagnostics** is where you look when ingestion silently stops.
+scheduling and security. Hub fields appear only in the modes that use them — the hub URL
+in spoke mode, the shared secret in hub and spoke.
+
+**Sources** is a repeatable list with a per-row *Test fetch* button that runs a live
+fetch and shows the first three normalized items without writing to the database.
+Type-specific fields (GDELT query, allowed domains, timespan) only appear for the type
+they belong to. The tab also exports the source list as JSON and imports it back, either
+merging on source id or replacing the list outright; every imported row goes through the
+same validation as the form, so bad rows are reported and skipped rather than saved.
+
+**Diagnostics** is where you look when ingestion silently stops.
 
 Three source types:
 

@@ -32,6 +32,10 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 	$type    = (string) ( $source['type'] ?? 'wp_rest' );
 	$id      = (string) ( $source['id'] ?? '' );
 	$domains = (array) ( $source['gdelt_domains'] ?? array() );
+
+	// Mirrors applyType() in admin.js so the wrong fields never flash on load.
+	$hide_gdelt = 'gdelt' === $type ? '' : ' hidden';
+	$hide_url   = 'gdelt' === $type ? ' hidden' : '';
 	?>
 	<div class="advtn-source" draggable="true" data-index="<?php echo esc_attr( (string) $index ); ?>">
 		<div class="advtn-source__bar">
@@ -82,26 +86,33 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 				<span><?php esc_html_e( 'Enabled', 'trending-now' ); ?></span>
 			</label>
 
-			<label class="advtn-field-url advtn-wide">
+			<label class="advtn-field-url advtn-wide"<?php echo esc_attr( $hide_url ); ?>>
 				<span><?php esc_html_e( 'URL', 'trending-now' ); ?></span>
 				<input type="url" name="sources[<?php echo esc_attr( (string) $index ); ?>][url]" value="<?php echo esc_attr( (string) ( $source['url'] ?? '' ) ); ?>" placeholder="https://example.com" />
 				<em><?php esc_html_e( 'Site root for REST sources; full feed URL for RSS.', 'trending-now' ); ?></em>
 			</label>
 
-			<label class="advtn-field-gdelt advtn-wide">
+			<label class="advtn-field-gdelt advtn-wide"<?php echo esc_attr( $hide_gdelt ); ?>>
 				<span><?php esc_html_e( 'GDELT query', 'trending-now' ); ?></span>
 				<input type="text" name="sources[<?php echo esc_attr( (string) $index ); ?>][gdelt_query]" value="<?php echo esc_attr( (string) ( $source['gdelt_query'] ?? '' ) ); ?>" placeholder='sourcelang:english (sportsbook OR "betting odds")' />
 			</label>
 
-			<label class="advtn-field-gdelt advtn-wide">
+			<label class="advtn-field-gdelt advtn-wide"<?php echo esc_attr( $hide_gdelt ); ?>>
 				<span><?php esc_html_e( 'Allowed domains', 'trending-now' ); ?></span>
 				<input type="text" name="sources[<?php echo esc_attr( (string) $index ); ?>][gdelt_domains]" value="<?php echo esc_attr( implode( ', ', array_map( 'strval', $domains ) ) ); ?>" placeholder="espn.com, cbssports.com, si.com" />
 				<em><?php esc_html_e( 'Comma separated. Enforced again after the response, because the query language is fuzzy.', 'trending-now' ); ?></em>
 			</label>
 
-			<label class="advtn-field-gdelt">
+			<label class="advtn-field-gdelt advtn-wide"<?php echo esc_attr( $hide_gdelt ); ?>>
 				<span><?php esc_html_e( 'Timespan', 'trending-now' ); ?></span>
 				<input type="text" name="sources[<?php echo esc_attr( (string) $index ); ?>][gdelt_timespan]" value="<?php echo esc_attr( (string) ( $source['gdelt_timespan'] ?? '2d' ) ); ?>" placeholder="2d" />
+				<em>
+					<?php
+					esc_html_e( 'How far back GDELT looks, counting back from now. A number followed by a unit: min (minutes), h (hours), d (days), w (weeks), m (months) — so 30min, 24h, 2d, 1w.', 'trending-now' );
+					echo ' ';
+					esc_html_e( 'It is a rolling window, not a schedule: every run re-queries the whole window, and articles already stored are matched by URL rather than duplicated. Keep it a little wider than your ingest interval so nothing slips through a missed cycle — with the default 20-hour interval, 2d is a sensible floor. Widening it mostly costs freshness, since "Items per cycle" still caps how many come back and the newest are returned first.', 'trending-now' );
+					?>
+				</em>
 			</label>
 		</div>
 
@@ -163,3 +174,61 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 
 	<?php submit_button( __( 'Save sources', 'trending-now' ) ); ?>
 </form>
+
+<hr />
+
+<h2><?php esc_html_e( 'Import / export', 'trending-now' ); ?></h2>
+<p class="description">
+	<?php esc_html_e( 'Move a source list between installs. Every imported row is validated exactly as though it had been typed into the form, so a bad row is reported and skipped rather than saved.', 'trending-now' ); ?>
+</p>
+
+<div class="advtn-portability">
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="advtn-portability__export">
+		<?php wp_nonce_field( 'advtn_export_sources' ); ?>
+		<input type="hidden" name="action" value="advtn_export_sources" />
+		<h3><?php esc_html_e( 'Export', 'trending-now' ); ?></h3>
+		<p class="description">
+			<?php
+			printf(
+				/* translators: %d: number of configured sources. */
+				esc_html__( 'Downloads all %d configured source(s) as JSON. Runtime state, counters and secrets are not included.', 'trending-now' ),
+				count( $advtn_sources )
+			);
+			?>
+		</p>
+		<p><button type="submit" class="button" <?php disabled( empty( $advtn_sources ) ); ?>><?php esc_html_e( 'Download JSON', 'trending-now' ); ?></button></p>
+	</form>
+
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" enctype="multipart/form-data" class="advtn-portability__import">
+		<?php wp_nonce_field( 'advtn_import_sources' ); ?>
+		<input type="hidden" name="action" value="advtn_import_sources" />
+		<h3><?php esc_html_e( 'Import', 'trending-now' ); ?></h3>
+
+		<p>
+			<label for="advtn-import-file"><strong><?php esc_html_e( 'JSON file', 'trending-now' ); ?></strong></label><br />
+			<input type="file" id="advtn-import-file" name="advtn_import_file" accept="application/json,.json" />
+		</p>
+
+		<p>
+			<label for="advtn-import-json"><strong><?php esc_html_e( '…or paste JSON', 'trending-now' ); ?></strong></label><br />
+			<textarea id="advtn-import-json" name="advtn_import_json" rows="5" class="large-text code" placeholder='{"sources":[{"label":"Example","type":"wp_rest","url":"https://example.com","limit":10,"enabled":true}]}'></textarea>
+			<span class="description"><?php esc_html_e( 'An exported file, or a bare array of source rows. A chosen file wins over pasted text.', 'trending-now' ); ?></span>
+		</p>
+
+		<fieldset>
+			<legend class="screen-reader-text"><?php esc_html_e( 'Import strategy', 'trending-now' ); ?></legend>
+			<p>
+				<label>
+					<input type="radio" name="advtn_import_mode" value="merge" checked="checked" />
+					<?php esc_html_e( 'Merge — update rows whose id matches, append the rest', 'trending-now' ); ?>
+				</label><br />
+				<label>
+					<input type="radio" name="advtn_import_mode" value="replace" />
+					<?php esc_html_e( 'Replace — discard the current list entirely', 'trending-now' ); ?>
+				</label>
+			</p>
+		</fieldset>
+
+		<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Import sources', 'trending-now' ); ?></button></p>
+	</form>
+</div>

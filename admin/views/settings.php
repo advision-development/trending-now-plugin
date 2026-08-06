@@ -15,7 +15,22 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$advtn_s = $settings->all();
+$advtn_s    = $settings->all();
+$advtn_mode = (string) $advtn_s['mode'];
+
+/**
+ * Emit the hidden attribute unless the current mode is in $modes.
+ *
+ * Rendered server-side as well as toggled in JS, so the irrelevant rows never
+ * flash on load and stay hidden if the script fails.
+ *
+ * @param string[] $modes Modes this row applies to.
+ * @param string   $mode  Current mode.
+ * @return string
+ */
+$advtn_mode_attr = static function ( array $modes, string $mode ): string {
+	return in_array( $mode, $modes, true ) ? '' : ' hidden';
+};
 ?>
 <form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="advtn-form">
 	<?php wp_nonce_field( 'advtn_save_settings' ); ?>
@@ -41,18 +56,18 @@ $advtn_s = $settings->all();
 				<p class="description"><?php esc_html_e( 'A spoke never contacts source sites directly; it pulls one pre-assembled list from the hub.', 'trending-now' ); ?></p>
 			</td>
 		</tr>
-		<tr>
+		<tr class="advtn-mode-row" data-modes="spoke"<?php echo esc_attr( $advtn_mode_attr( array( 'spoke' ), $advtn_mode ) ); ?>>
 			<th scope="row"><label for="advtn-hub-url"><?php esc_html_e( 'Hub URL', 'trending-now' ); ?></label></th>
 			<td>
 				<input type="url" class="regular-text" id="advtn-hub-url" name="advtn[hub_url]" value="<?php echo esc_attr( (string) $advtn_s['hub_url'] ); ?>" placeholder="https://hub.example.com" />
-				<p class="description"><?php esc_html_e( 'Spoke mode only. Site root of the hub install.', 'trending-now' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Site root of the hub install to pull the assembled list from.', 'trending-now' ); ?></p>
 			</td>
 		</tr>
-		<tr>
+		<tr class="advtn-mode-row" data-modes="hub spoke"<?php echo esc_attr( $advtn_mode_attr( array( 'hub', 'spoke' ), $advtn_mode ) ); ?>>
 			<th scope="row"><label for="advtn-hub-secret"><?php esc_html_e( 'Hub shared secret', 'trending-now' ); ?></label></th>
 			<td>
 				<input type="text" class="regular-text code" id="advtn-hub-secret" name="advtn[hub_secret]" value="<?php echo esc_attr( (string) $advtn_s['hub_secret'] ); ?>" />
-				<p class="description"><?php esc_html_e( 'Must match on the hub and every spoke.', 'trending-now' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Must match on the hub and every spoke. The hub verifies requests with it; a spoke signs with it.', 'trending-now' ); ?></p>
 			</td>
 		</tr>
 	</table>
@@ -225,5 +240,7 @@ $advtn_s = $settings->all();
 	<?php wp_nonce_field( 'advtn_action' ); ?>
 	<input type="hidden" name="action" value="advtn_action" />
 	<button type="submit" class="button advtn-confirm" name="advtn_do" value="regenerate_ingest_secret"><?php esc_html_e( 'Regenerate ingest secret', 'trending-now' ); ?></button>
-	<button type="submit" class="button advtn-confirm" name="advtn_do" value="regenerate_hub_secret"><?php esc_html_e( 'Regenerate hub secret', 'trending-now' ); ?></button>
+	<span class="advtn-mode-row" data-modes="hub spoke"<?php echo esc_attr( $advtn_mode_attr( array( 'hub', 'spoke' ), $advtn_mode ) ); ?>>
+		<button type="submit" class="button advtn-confirm" name="advtn_do" value="regenerate_hub_secret"><?php esc_html_e( 'Regenerate hub secret', 'trending-now' ); ?></button>
+	</span>
 </form>
