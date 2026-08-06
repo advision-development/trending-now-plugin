@@ -281,6 +281,58 @@ final class ADVTN_Archive {
 	}
 
 	/**
+	 * Open the document for the archive template.
+	 *
+	 * get_header()/get_footer() fall back to the theme-compat shims on block
+	 * themes, which emit a deprecation notice on every request. Block themes
+	 * are the modern default, so branch instead of paying that.
+	 *
+	 * @return void
+	 */
+	public function render_header(): void {
+		if ( ! function_exists( 'wp_is_block_theme' ) || ! wp_is_block_theme() ) {
+			get_header();
+			return;
+		}
+
+		?>
+		<!DOCTYPE html>
+		<html <?php language_attributes(); ?>>
+		<head>
+			<meta charset="<?php bloginfo( 'charset' ); ?>" />
+			<meta name="viewport" content="width=device-width, initial-scale=1" />
+			<?php wp_head(); ?>
+		</head>
+		<body <?php body_class(); ?>>
+		<?php
+		wp_body_open();
+
+		if ( function_exists( 'block_header_area' ) ) {
+			block_header_area();
+		}
+	}
+
+	/**
+	 * Close the document for the archive template.
+	 *
+	 * @return void
+	 */
+	public function render_footer(): void {
+		if ( ! function_exists( 'wp_is_block_theme' ) || ! wp_is_block_theme() ) {
+			get_footer();
+			return;
+		}
+
+		if ( function_exists( 'block_footer_area' ) ) {
+			block_footer_area();
+		}
+
+		wp_footer();
+
+		echo '</body></html>';
+	}
+
+	/**
 	 * Add the archive to the core sitemap when it is indexable.
 	 *
 	 * Nothing to exclude when noindex is set: the archive is not a post

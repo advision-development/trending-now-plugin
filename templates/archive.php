@@ -23,7 +23,7 @@ $advtn_page   = $advtn_archive->current_page();
 $advtn_pages  = $advtn_archive->total_pages();
 $advtn_intro  = $advtn_settings->get_string( 'archive_intro' );
 
-get_header();
+$advtn_archive->render_header();
 ?>
 <main id="primary" class="<?php echo esc_attr( $advtn_prefix ); ?>-archive" role="main">
 	<header class="<?php echo esc_attr( $advtn_prefix ); ?>-archive__header">
@@ -91,4 +91,4 @@ get_header();
 	<?php endif; ?>
 </main>
 <?php
-get_footer();
+$advtn_archive->render_footer();

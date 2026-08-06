@@ -1,0 +1,103 @@
+name: trending-now
+
+# wp-config.php reads WORDPRESS_CONFIG_EXTRA through getenv() on every request,
+# so every container that boots WordPress — including the wp-cli runners —
+# needs the same environment or constants silently go missing there.
+x-wp-env: &wp_env
+  WORDPRESS_DB_HOST: db
+  WORDPRESS_DB_NAME: wordpress
+  WORDPRESS_DB_USER: wordpress
+  WORDPRESS_DB_PASSWORD: wordpress
+  WORDPRESS_DEBUG: 1
+  WORDPRESS_CONFIG_EXTRA: |
+    define( 'WP_DEBUG_LOG', true );
+    define( 'WP_DEBUG_DISPLAY', false );
+    define( 'SCRIPT_DEBUG', true );
+    /* The source site and the hub both live on loopback in this stack,
+       which wp_http_validate_url() rejects outright. */
+    define( 'ADVTN_ALLOW_LOCAL_URLS', true );
+
+services:
+  db:
+    image: mariadb:11
+    command: --max_allowed_packet=64M
+    environment:
+      MARIADB_ROOT_PASSWORD: root
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: wordpress
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./.docker/init-db.sql:/docker-entrypoint-initdb.d/10-source-db.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Site under test. http://localhost:8080
+  wordpress:
+    image: wordpress:php8.3-apache
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment: *wp_env
+    volumes:
+      - wp_data:/var/www/html
+      - .:/var/www/html/wp-content/plugins/trending-now
+      - ./.docker/apache-loopback.conf:/etc/apache2/conf-enabled/zz-loopback.conf:ro
+
+  # Stand-in "owned network site" to ingest from. http://127.0.0.1:8081
+  # Deliberately reachable on a different host string than the site under
+  # test, so its items are not discarded as self-links.
+  source:
+    image: wordpress:php8.3-apache
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8081:80"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress_source
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DEBUG: 1
+    volumes:
+      - source_data:/var/www/html
+
+  # One-shot command runner: `docker compose run --rm cli wp <command>`
+  cli:
+    image: wordpress:cli-php8.3
+    user: "33:33"
+    depends_on:
+      - wordpress
+    environment: *wp_env
+    volumes:
+      - wp_data:/var/www/html
+      - .:/var/www/html/wp-content/plugins/trending-now
+    entrypoint: ["wp"]
+    command: ["--info"]
+
+  # Same, against the source site.
+  cli_source:
+    image: wordpress:cli-php8.3
+    user: "33:33"
+    depends_on:
+      - source
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_NAME: wordpress_source
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+    volumes:
+      - source_data:/var/www/html
+    entrypoint: ["wp"]
+    command: ["--info"]
+
+volumes:
+  db_data:
+  wp_data:
+  source_data:

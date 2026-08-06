@@ -26,6 +26,19 @@ composer test          # same thing
 find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l   # lint
 ```
 
+Local WordPress (two instances: site under test + a source site to ingest from):
+
+```bash
+bin/dev up && bin/dev seed && bin/dev configure && bin/dev ingest && bin/dev verify
+bin/dev wp <wp-cli command>    # site under test  (http://localhost:8080)
+bin/dev src <wp-cli command>   # source site      (http://127.0.0.1:8081)
+bin/dev reset                  # destroy volumes
+```
+
+The two sites must stay on **different host strings**: items whose host matches the
+local site are dropped as self-links, so putting both on `localhost` makes ingestion
+silently return nothing. See README for the rest of the stack's constraints.
+
 WP-CLI (optional, only registered when `WP_CLI` is defined):
 
 ```bash

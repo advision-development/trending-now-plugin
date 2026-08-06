@@ -128,6 +128,46 @@ an unbounded link dump.
 php tests/run.php    # URL normalization, hash identity, HMAC signing
 ```
 
+### Local environment
+
+`docker compose` brings up two WordPress instances: the site under test and a stand-in
+"owned network site" to ingest from. They are deliberately reachable on different host
+strings — `localhost:8080` and `127.0.0.1:8081` — because items whose host matches the
+local site are discarded as self-links, so a shared hostname would silently ingest
+nothing.
+
+```bash
+bin/dev up          # start containers, install both sites, activate the plugin
+bin/dev seed        # 5 posts on the source site, 4 with a featured image
+bin/dev configure   # register a wp_rest + a gdelt source, place the shortcode
+bin/dev ingest      # synchronous ingest cycle
+bin/dev verify      # assert the rendered widget contains real links
+bin/dev status      # diagnostics JSON
+bin/dev wp <cmd>    # wp-cli against the site under test
+bin/dev src <cmd>   # wp-cli against the source site
+bin/dev logs        # tail both sites
+bin/dev reset       # destroy containers and volumes
+```
+
+| | |
+|---|---|
+| Site under test | <http://localhost:8080> — `admin` / `admin` |
+| Source site | <http://127.0.0.1:8081> — `admin` / `admin` |
+
+Notes on the stack:
+
+- Apache also listens on 8080 inside the container. The site's `home_url` is
+  `http://localhost:8080`, so WordPress loopback requests — which Action Scheduler's
+  queue runner depends on — target that port from *inside* the container.
+- `WORDPRESS_CONFIG_EXTRA` is read through `getenv()` on every request, so the wp-cli
+  services share the same environment block as the web container. Without that,
+  constants defined there are silently missing from CLI runs.
+- `ADVTN_ALLOW_LOCAL_URLS` is defined in the container only. It relaxes
+  `wp_http_validate_url()`, which otherwise rejects loopback and private-range hosts
+  outright. Never define it in production.
+- GDELT routinely takes 10s+ to answer and rate-limits with `429`, so the local stack
+  raises `http_timeout` well above the 5s production default.
+
 Architecture notes, invariants and the list of explicitly rejected approaches are in
 [CLAUDE.md](CLAUDE.md). The authoritative specification is
 [docs/trending-now-plugin-spec.md](docs/trending-now-plugin-spec.md).

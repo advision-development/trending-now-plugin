@@ -50,9 +50,11 @@ final class ADVTN_Source_WP_REST extends ADVTN_Source_Base {
 				'order'    => 'desc',
 				'status'   => 'publish',
 				'_embed'   => 'wp:featuredmedia',
-				// _embedded must be listed explicitly or the embed payload is
-				// stripped from the response.
-				'_fields'  => 'id,link,title,excerpt,date_gmt,_embedded',
+				// Both _embedded AND _links must be listed. The server builds
+				// _embedded by walking $data['_links'], and _fields strips
+				// _links out of $data before that runs — so asking for
+				// _embedded alone returns neither. Verified against WP 6.9.
+				'_fields'  => 'id,link,title,excerpt,date_gmt,_embedded,_links',
 			),
 			$base . '/wp-json/wp/v2/posts'
 		);
