@@ -48,6 +48,7 @@ services:
       - wp_data:/var/www/html
       - .:/var/www/html/wp-content/plugins/trending-now
       - ./.docker/apache-loopback.conf:/etc/apache2/conf-enabled/zz-loopback.conf:ro
+      - ./.docker/mu-dev-hosts.php:/var/www/html/wp-content/mu-plugins/advtn-dev-hosts.php:ro
 
   # Stand-in "owned network site" to ingest from. http://127.0.0.1:8081
   # Deliberately reachable on a different host string than the site under
@@ -78,6 +79,7 @@ services:
     volumes:
       - wp_data:/var/www/html
       - .:/var/www/html/wp-content/plugins/trending-now
+      - ./.docker/mu-dev-hosts.php:/var/www/html/wp-content/mu-plugins/advtn-dev-hosts.php:ro
     entrypoint: ["wp"]
     command: ["--info"]
 
