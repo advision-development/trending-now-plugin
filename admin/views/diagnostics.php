@@ -172,6 +172,167 @@ $advtn_badge = static function ( bool $value ): string {
 	</tbody>
 </table>
 
+<?php
+$advtn_filters  = $admin->item_filters();
+$advtn_per_page = 25;
+$advtn_ipage    = $admin->item_page();
+$advtn_matching = $repository->count_where( $advtn_filters );
+$advtn_ipages   = max( 1, (int) ceil( $advtn_matching / $advtn_per_page ) );
+$advtn_ipage    = min( $advtn_ipage, $advtn_ipages );
+$advtn_rows     = $repository->browse( $advtn_filters, $advtn_per_page, ( $advtn_ipage - 1 ) * $advtn_per_page );
+$advtn_filtered = ! empty( array_filter( $advtn_filters ) );
+$advtn_base     = admin_url( 'admin.php?page=' . ADVTN_Admin::MENU_SLUG . '&tab=diagnostics' );
+?>
+
+<h2>
+	<?php
+	printf(
+		/* translators: 1: rows matching the filter, 2: total rows stored. */
+		esc_html__( 'Stored items — %1$d shown of %2$d', 'trending-now' ),
+		(int) $advtn_matching,
+		(int) $advtn_status['counts']['total']
+	);
+	?>
+</h2>
+<p class="description"><?php esc_html_e( 'Deleting an item removes it from the table, the live selection and the archive. It will come back on the next ingest if its source still lists it — disable or remove the source first if you want it gone for good.', 'trending-now' ); ?></p>
+
+<form method="get" action="<?php echo esc_url( admin_url( 'admin.php' ) ); ?>" class="advtn-item-filters">
+	<input type="hidden" name="page" value="<?php echo esc_attr( ADVTN_Admin::MENU_SLUG ); ?>" />
+	<input type="hidden" name="tab" value="diagnostics" />
+
+	<select name="f_source">
+		<option value=""><?php esc_html_e( 'All sources', 'trending-now' ); ?></option>
+		<?php foreach ( $advtn_sources as $advtn_src ) : ?>
+			<option value="<?php echo esc_attr( (string) $advtn_src['id'] ); ?>" <?php selected( $advtn_filters['source_id'], (string) $advtn_src['id'] ); ?>>
+				<?php echo esc_html( (string) ( $advtn_src['label'] ?? $advtn_src['id'] ) ); ?>
+			</option>
+		<?php endforeach; ?>
+	</select>
+
+	<select name="f_host">
+		<option value=""><?php esc_html_e( 'All hosts', 'trending-now' ); ?></option>
+		<?php foreach ( $repository->hosts() as $advtn_h ) : ?>
+			<option value="<?php echo esc_attr( $advtn_h['host'] ); ?>" <?php selected( $advtn_filters['host'], $advtn_h['host'] ); ?>>
+				<?php echo esc_html( $advtn_h['host'] . ' (' . $advtn_h['n'] . ')' ); ?>
+			</option>
+		<?php endforeach; ?>
+	</select>
+
+	<select name="f_type">
+		<option value=""><?php esc_html_e( 'All types', 'trending-now' ); ?></option>
+		<?php foreach ( array( 'wp_rest', 'rss', 'gdelt' ) as $advtn_t ) : ?>
+			<option value="<?php echo esc_attr( $advtn_t ); ?>" <?php selected( $advtn_filters['source_type'], $advtn_t ); ?>><?php echo esc_html( $advtn_t ); ?></option>
+		<?php endforeach; ?>
+	</select>
+
+	<select name="f_status">
+		<option value=""><?php esc_html_e( 'Any status', 'trending-now' ); ?></option>
+		<option value="active" <?php selected( $advtn_filters['status'], 'active' ); ?>><?php esc_html_e( 'active', 'trending-now' ); ?></option>
+		<option value="stale" <?php selected( $advtn_filters['status'], 'stale' ); ?>><?php esc_html_e( 'stale', 'trending-now' ); ?></option>
+	</select>
+
+	<input type="search" name="f_search" value="<?php echo esc_attr( $advtn_filters['search'] ); ?>" placeholder="<?php esc_attr_e( 'title or URL', 'trending-now' ); ?>" />
+	<button type="submit" class="button"><?php esc_html_e( 'Filter', 'trending-now' ); ?></button>
+	<?php if ( $advtn_filtered ) : ?>
+		<a class="button-link" href="<?php echo esc_url( $advtn_base ); ?>"><?php esc_html_e( 'Reset', 'trending-now' ); ?></a>
+	<?php endif; ?>
+</form>
+
+<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+	<?php wp_nonce_field( 'advtn_action' ); ?>
+	<input type="hidden" name="action" value="advtn_action" />
+	<?php foreach ( array( 'f_source' => 'source_id', 'f_host' => 'host', 'f_type' => 'source_type', 'f_status' => 'status', 'f_search' => 'search' ) as $advtn_field => $advtn_key ) : ?>
+		<input type="hidden" name="<?php echo esc_attr( $advtn_field ); ?>" value="<?php echo esc_attr( $advtn_filters[ $advtn_key ] ); ?>" />
+	<?php endforeach; ?>
+
+	<table class="widefat striped advtn-items">
+		<thead>
+			<tr>
+				<td class="check-column"><input type="checkbox" class="advtn-check-all" /></td>
+				<th><?php esc_html_e( 'Title', 'trending-now' ); ?></th>
+				<th><?php esc_html_e( 'Host', 'trending-now' ); ?></th>
+				<th><?php esc_html_e( 'Source', 'trending-now' ); ?></th>
+				<th><?php esc_html_e( 'Published', 'trending-now' ); ?></th>
+				<th><?php esc_html_e( 'Shown', 'trending-now' ); ?></th>
+				<th><?php esc_html_e( 'Status', 'trending-now' ); ?></th>
+				<th></th>
+			</tr>
+		</thead>
+		<tbody>
+			<?php if ( empty( $advtn_rows ) ) : ?>
+				<tr><td colspan="8"><?php esc_html_e( 'No items match.', 'trending-now' ); ?></td></tr>
+			<?php endif; ?>
+			<?php foreach ( $advtn_rows as $advtn_row ) : ?>
+				<tr>
+					<th scope="row" class="check-column">
+						<input type="checkbox" name="item_ids[]" value="<?php echo esc_attr( (string) $advtn_row['id'] ); ?>" />
+					</th>
+					<td><a href="<?php echo esc_url( (string) $advtn_row['url'] ); ?>" target="_blank" rel="noopener"><?php echo esc_html( (string) $advtn_row['title'] ); ?></a></td>
+					<td><?php echo esc_html( (string) $advtn_row['host'] ); ?></td>
+					<td><code><?php echo esc_html( (string) $advtn_row['source_id'] ); ?></code><br /><?php echo esc_html( (string) $advtn_row['source_type'] ); ?></td>
+					<td><?php echo esc_html( (string) ( $advtn_row['published_at'] ?? '—' ) ); ?></td>
+					<td><?php echo esc_html( (string) $advtn_row['times_shown'] ); ?></td>
+					<td><?php echo esc_html( (string) $advtn_row['status'] ); ?></td>
+					<td>
+						<button type="submit" class="button-link delete advtn-confirm" name="advtn_delete_item" value="<?php echo esc_attr( (string) $advtn_row['id'] ); ?>"><?php esc_html_e( 'Delete', 'trending-now' ); ?></button>
+					</td>
+				</tr>
+			<?php endforeach; ?>
+		</tbody>
+	</table>
+
+	<p class="advtn-item-actions">
+		<button type="submit" class="button advtn-confirm" name="advtn_do" value="delete_selected_items"><?php esc_html_e( 'Delete selected', 'trending-now' ); ?></button>
+
+		<?php if ( $advtn_filtered ) : ?>
+			<button type="submit" class="button advtn-confirm" name="advtn_do" value="delete_filtered_items">
+				<?php
+				printf(
+					/* translators: %d: rows matching the current filter. */
+					esc_html__( 'Delete all %d matching this filter', 'trending-now' ),
+					(int) $advtn_matching
+				);
+				?>
+			</button>
+		<?php endif; ?>
+
+		<?php if ( $advtn_ipages > 1 ) : ?>
+			<span class="advtn-item-pager">
+				<?php
+				echo wp_kses_post(
+					paginate_links(
+						array(
+							'base'      => add_query_arg( 'item_page', '%#%', $advtn_base . ( $advtn_filtered ? '&' . http_build_query( array_filter( array( 'f_source' => $advtn_filters['source_id'], 'f_host' => $advtn_filters['host'], 'f_type' => $advtn_filters['source_type'], 'f_status' => $advtn_filters['status'], 'f_search' => $advtn_filters['search'] ) ) ) : '' ) ),
+							'format'    => '',
+							'current'   => $advtn_ipage,
+							'total'     => $advtn_ipages,
+							'mid_size'  => 1,
+							'prev_text' => '&laquo;',
+							'next_text' => '&raquo;',
+						)
+					) ?? ''
+				);
+				?>
+			</span>
+		<?php endif; ?>
+	</p>
+</form>
+
+<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="advtn-danger">
+	<?php wp_nonce_field( 'advtn_action' ); ?>
+	<input type="hidden" name="action" value="advtn_action" />
+	<button type="submit" class="button advtn-confirm-hard" name="advtn_do" value="delete_all_items">
+		<?php
+		printf(
+			/* translators: %d: total rows stored. */
+			esc_html__( 'Delete everything (%d items)', 'trending-now' ),
+			(int) $advtn_status['counts']['total']
+		);
+		?>
+	</button>
+	<span class="description"><?php esc_html_e( 'Empties the items table. Sources, settings and secrets are untouched, and the next ingest repopulates from whatever is still enabled.', 'trending-now' ); ?></span>
+</form>
+
 <h2>
 	<?php
 	printf(

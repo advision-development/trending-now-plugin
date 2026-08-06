@@ -229,6 +229,63 @@ final class ADVTN_Repository {
 		$wpdb->query( "TRUNCATE TABLE {$table}" );
 	}
 
+	/**
+	 * Delete specific rows.
+	 *
+	 * @param int[] $ids Item ids.
+	 * @return int Rows deleted.
+	 */
+	public function delete_by_ids( array $ids ): int {
+		global $wpdb;
+
+		$ids = $this->clean_ids( $ids );
+		if ( empty( $ids ) ) {
+			return 0;
+		}
+
+		$table        = $this->table();
+		$placeholders = $this->placeholders( $ids );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+		return (int) $wpdb->query(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"DELETE FROM {$table} WHERE id IN ({$placeholders})",
+				$ids
+			)
+		);
+	}
+
+	/**
+	 * Delete every row matching a filter.
+	 *
+	 * Refuses an empty filter — callers that mean "everything" must say so via
+	 * delete_all(), so a dropped filter can never silently wipe the table.
+	 *
+	 * @param array<string,string> $filters source_id, host, source_type, status, search.
+	 * @return int Rows deleted.
+	 */
+	public function delete_where( array $filters ): int {
+		global $wpdb;
+
+		$clause = $this->build_where( $filters );
+
+		if ( empty( $clause['params'] ) ) {
+			return 0;
+		}
+
+		$table = $this->table();
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+		return (int) $wpdb->query(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"DELETE FROM {$table} WHERE " . $clause['sql'],
+				$clause['params']
+			)
+		);
+	}
+
 	/* ---------------------------------------------------------------------
 	 * Reads
 	 * ------------------------------------------------------------------ */
@@ -542,9 +599,126 @@ final class ADVTN_Repository {
 		return $out;
 	}
 
+	/**
+	 * A filtered, paginated page of items for the admin browser.
+	 *
+	 * @param array<string,string> $filters  See build_where().
+	 * @param int                  $per_page Page size.
+	 * @param int                  $offset   Row offset.
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function browse( array $filters, int $per_page, int $offset ): array {
+		global $wpdb;
+
+		$per_page = max( 1, min( 200, $per_page ) );
+		$offset   = max( 0, $offset );
+		$table    = $this->table();
+		$clause   = $this->build_where( $filters );
+
+		$sql = "SELECT id, url, title, host, site_name, source_id, source_type, published_at,
+					   first_seen, last_seen, first_shown_at, times_shown, status
+				FROM {$table}
+				WHERE " . $clause['sql'] . '
+				ORDER BY last_seen DESC, id DESC
+				LIMIT %d OFFSET %d';
+
+		$params   = $clause['params'];
+		$params[] = $per_page;
+		$params[] = $offset;
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+		$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Row count for the same filter as browse().
+	 *
+	 * @param array<string,string> $filters See build_where().
+	 * @return int
+	 */
+	public function count_where( array $filters ): int {
+		global $wpdb;
+
+		$table  = $this->table();
+		$clause = $this->build_where( $filters );
+
+		$sql = "SELECT COUNT(*) FROM {$table} WHERE " . $clause['sql'];
+
+		if ( empty( $clause['params'] ) ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+			return (int) $wpdb->get_var( $sql );
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+		return (int) $wpdb->get_var( $wpdb->prepare( $sql, $clause['params'] ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+	}
+
+	/**
+	 * Distinct hosts with their row counts, most rows first.
+	 *
+	 * @return array<int,array{host:string,n:int}>
+	 */
+	public function hosts(): array {
+		global $wpdb;
+
+		$table = $this->table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$rows = $wpdb->get_results( "SELECT host, COUNT(*) AS n FROM {$table} GROUP BY host ORDER BY n DESC, host ASC", ARRAY_A );
+
+		return array_map(
+			static fn( $row ) => array(
+				'host' => (string) $row['host'],
+				'n'    => (int) $row['n'],
+			),
+			(array) $rows
+		);
+	}
+
 	/* ---------------------------------------------------------------------
 	 * Helpers
 	 * ------------------------------------------------------------------ */
+
+	/**
+	 * Turn a filter array into a WHERE fragment plus its parameters.
+	 *
+	 * Yields `1=1` with no parameters when nothing is filtered, which is how
+	 * delete_where() detects an unfiltered call and refuses it.
+	 *
+	 * @param array<string,string> $filters source_id, host, source_type, status, search.
+	 * @return array{sql:string,params:array<int,string>}
+	 */
+	private function build_where( array $filters ): array {
+		global $wpdb;
+
+		$where  = array();
+		$params = array();
+
+		foreach ( array( 'source_id', 'host', 'source_type', 'status' ) as $column ) {
+			$value = isset( $filters[ $column ] ) ? trim( (string) $filters[ $column ] ) : '';
+
+			if ( '' !== $value ) {
+				// Column names come from this fixed list, never from input.
+				$where[]  = "{$column} = %s";
+				$params[] = $value;
+			}
+		}
+
+		$search = isset( $filters['search'] ) ? trim( (string) $filters['search'] ) : '';
+
+		if ( '' !== $search ) {
+			$like     = '%' . $wpdb->esc_like( $search ) . '%';
+			$where[]  = '(title LIKE %s OR url LIKE %s)';
+			$params[] = $like;
+			$params[] = $like;
+		}
+
+		return array(
+			'sql'    => empty( $where ) ? '1=1' : implode( ' AND ', $where ),
+			'params' => $params,
+		);
+	}
 
 	/**
 	 * Cast to positive unique ints.

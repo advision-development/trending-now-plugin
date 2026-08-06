@@ -39,7 +39,12 @@ they belong to. The tab also exports the source list as JSON and imports it back
 merging on source id or replacing the list outright; every imported row goes through the
 same validation as the form, so bad rows are reported and skipped rather than saved.
 
-**Diagnostics** is where you look when ingestion silently stops. *Run ingest now* fetches
+**Diagnostics** is where you look when ingestion silently stops. It also browses the
+stored items — filter by source, host, type, status or a title/URL search — and deletes
+them: one row, a checked selection, everything matching the current filter, or the whole
+table. A filtered delete refuses to run with no filter set, so a dropped dropdown can
+never turn into a full wipe. Deleting only clears stored rows; if a source still lists an
+article it returns on the next ingest, so disable or remove the source first. *Run ingest now* fetches
 every source in that one request and rebuilds the selection before the page reloads, so
 the result is visible immediately; the scheduled path stays staggered. If the batch time
 budget runs out, the remaining sources are queued and the panel lists the pending actions

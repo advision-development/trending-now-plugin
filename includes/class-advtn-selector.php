@@ -150,6 +150,26 @@ final class ADVTN_Selector {
 	}
 
 	/**
+	 * Drop ids from the committed selection without rebuilding it.
+	 *
+	 * Used after a deletion. Rebuilding here would be wrong: build_and_commit()
+	 * stamps times_shown, so tidying up would inflate every counter.
+	 *
+	 * @param int[] $ids Ids to forget. Empty means forget everything.
+	 * @return void
+	 */
+	public function forget( array $ids = array() ): void {
+		if ( empty( $ids ) ) {
+			update_option( self::OPTION_SELECTION, array(), false );
+			return;
+		}
+
+		$remaining = array_values( array_diff( $this->current_ids(), array_map( 'intval', $ids ) ) );
+
+		update_option( self::OPTION_SELECTION, $remaining, false );
+	}
+
+	/**
 	 * The committed selection's rows, in order.
 	 *
 	 * @return array<int,array<string,mixed>>

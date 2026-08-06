@@ -43,6 +43,7 @@ WP-CLI (optional, only registered when `WP_CLI` is defined):
 
 ```bash
 wp trending-now ingest [--source=<id>] [--force] [--sync]
+wp trending-now flush [--all] [--source=<id>] [--host=<host>] [--status=<s>] [--yes]
 wp trending-now select | render [--uncached] | status | prune | unlock | purge
 ```
 
@@ -150,6 +151,10 @@ pageview, requiring WP-CLI.
   a final pass with the cap lifted, because spec §7.1 also says never render fewer items
   than are available — with only a few sources configured, or when pinned items have
   eaten a source's quota, enforcing the cap strictly leaves slots empty.
+- After deleting rows, drop the dead ids from `advtn_current_selection` with
+  `ADVTN_Selector::forget()` and purge the render cache. Do **not** call
+  `build_and_commit()` to tidy up — it stamps `times_shown`, so housekeeping would
+  inflate every counter.
 - Nothing an ingest writes is visible until `finalize()` runs: it is what commits the
   selection and busts the render cache. When debugging "my items are not showing", check
   `advtn_last_ingest` and the lock before suspecting the fetch.

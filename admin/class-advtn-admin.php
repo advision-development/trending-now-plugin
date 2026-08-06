@@ -108,6 +108,7 @@ final class ADVTN_Admin {
 					'failed'    => __( 'Request failed.', 'trending-now' ),
 					'confirm'   => __( 'Are you sure?', 'trending-now' ),
 					'replace'   => __( 'Replace discards every source currently configured on this site. Continue?', 'trending-now' ),
+					'deleteAll' => __( 'This empties the entire items table. Sources and settings are kept, but every stored article and its display history is gone. Continue?', 'trending-now' ),
 				),
 			)
 		);
@@ -473,6 +474,14 @@ final class ADVTN_Admin {
 	public function handle_action(): void {
 		$this->guard( 'advtn_action' );
 
+		// A per-row Delete button submits only its own name/value, so it never
+		// carries advtn_do. Handle it before the switch.
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
+		if ( isset( $_POST['advtn_delete_item'] ) ) {
+			$this->delete_items( array( (int) wp_unslash( $_POST['advtn_delete_item'] ) ) );
+			$this->redirect( 'diagnostics', 'items_deleted' );
+		}
+
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
 		$action = isset( $_POST['advtn_do'] ) ? sanitize_key( wp_unslash( $_POST['advtn_do'] ) ) : '';
 		$tab    = 'diagnostics';
@@ -537,6 +546,65 @@ final class ADVTN_Admin {
 				$notice = 'log_cleared';
 				break;
 
+			case 'delete_selected_items':
+				// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
+				$ids = isset( $_POST['item_ids'] ) ? array_map( 'intval', (array) wp_unslash( $_POST['item_ids'] ) ) : array();
+
+				if ( empty( $ids ) ) {
+					$notice = 'nothing_selected';
+					break;
+				}
+
+				$this->delete_items( $ids );
+				$notice = 'items_deleted';
+				break;
+
+			case 'delete_filtered_items':
+				$filters = $this->item_filters();
+
+				if ( empty( array_filter( $filters ) ) ) {
+					// Never let a dropped filter turn into "delete everything".
+					$notice = 'filter_required';
+					break;
+				}
+
+				$deleted = $this->repository->delete_where( $filters );
+				$this->after_delete();
+
+				set_transient(
+					'advtn_admin_summary',
+					sprintf(
+						/* translators: 1: rows deleted, 2: the filter that matched them. */
+						__( 'Deleted %1$d item(s) matching %2$s.', 'trending-now' ),
+						$deleted,
+						$this->describe_filters( $filters )
+					),
+					60
+				);
+
+				$notice = 'items_deleted';
+				break;
+
+			case 'delete_all_items':
+				$total = $this->repository->counts()['total'];
+				$this->repository->delete_all();
+				$this->after_delete();
+
+				set_transient(
+					'advtn_admin_summary',
+					sprintf(
+						/* translators: %d: rows deleted. */
+						__( 'Deleted all %d item(s). The next ingest will repopulate from the enabled sources.', 'trending-now' ),
+						$total
+					),
+					60
+				);
+
+				ADVTN_Logger::log( 'warning', 'All items deleted from the admin.', array( 'rows' => $total ) );
+
+				$notice = 'items_deleted';
+				break;
+
 			case 'test_loopback':
 				$notice = ADVTN_REST::loopback_ok( true ) ? 'loopback_ok' : 'loopback_failed';
 				break;
@@ -558,6 +626,102 @@ final class ADVTN_Admin {
 		}
 
 		$this->redirect( $tab, $notice );
+	}
+
+	/**
+	 * Item-browser filters, read from the request.
+	 *
+	 * @return array<string,string>
+	 */
+	public function item_filters(): array {
+		// phpcs:disable WordPress.Security.NonceVerification -- read-only filters; destructive use is nonce-checked by the caller.
+		$request = 'POST' === ( $_SERVER['REQUEST_METHOD'] ?? 'GET' ) ? $_POST : $_GET;
+
+		$filters = array(
+			'source_id'   => isset( $request['f_source'] ) ? sanitize_text_field( wp_unslash( $request['f_source'] ) ) : '',
+			'host'        => isset( $request['f_host'] ) ? sanitize_text_field( wp_unslash( $request['f_host'] ) ) : '',
+			'source_type' => isset( $request['f_type'] ) ? sanitize_key( wp_unslash( $request['f_type'] ) ) : '',
+			'status'      => isset( $request['f_status'] ) ? sanitize_key( wp_unslash( $request['f_status'] ) ) : '',
+			'search'      => isset( $request['f_search'] ) ? sanitize_text_field( wp_unslash( $request['f_search'] ) ) : '',
+		);
+		// phpcs:enable
+
+		if ( ! in_array( $filters['status'], array( '', 'active', 'stale' ), true ) ) {
+			$filters['status'] = '';
+		}
+		if ( ! in_array( $filters['source_type'], array( '', 'wp_rest', 'rss', 'gdelt' ), true ) ) {
+			$filters['source_type'] = '';
+		}
+
+		return $filters;
+	}
+
+	/**
+	 * Current page of the item browser.
+	 *
+	 * @return int
+	 */
+	public function item_page(): int {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- pagination only.
+		return max( 1, (int) ( $_GET['item_page'] ?? 1 ) );
+	}
+
+	/**
+	 * Human-readable rendering of an active filter set.
+	 *
+	 * @param array<string,string> $filters Filters.
+	 * @return string
+	 */
+	private function describe_filters( array $filters ): string {
+		$parts = array();
+
+		foreach ( array_filter( $filters ) as $key => $value ) {
+			$parts[] = $key . '=' . $value;
+		}
+
+		return empty( $parts ) ? __( 'everything', 'trending-now' ) : implode( ', ', $parts );
+	}
+
+	/**
+	 * Delete rows by id and report the count.
+	 *
+	 * @param int[] $ids Item ids.
+	 * @return int
+	 */
+	private function delete_items( array $ids ): int {
+		$deleted = $this->repository->delete_by_ids( $ids );
+
+		advtn()->selector()->forget( $ids );
+		advtn()->renderer()->purge_cache();
+
+		set_transient(
+			'advtn_admin_summary',
+			sprintf(
+				/* translators: %d: rows deleted. */
+				_n( 'Deleted %d item.', 'Deleted %d items.', $deleted, 'trending-now' ),
+				$deleted
+			),
+			60
+		);
+
+		return $deleted;
+	}
+
+	/**
+	 * Shared cleanup after a bulk delete.
+	 *
+	 * The stored selection may now point at rows that are gone, and the cached
+	 * HTML certainly still shows them.
+	 *
+	 * @return void
+	 */
+	private function after_delete(): void {
+		$live      = advtn()->selector()->current_ids();
+		$surviving = array_column( $this->repository->get_by_ids( $live ), 'id' );
+
+		advtn()->selector()->forget( array_diff( $live, array_map( 'intval', $surviving ) ) );
+		advtn()->renderer()->purge_cache();
+		delete_transient( 'advtn_archive_count' );
 	}
 
 	/**
@@ -679,6 +843,9 @@ final class ADVTN_Admin {
 			'loopback_failed'    => array( 'error', __( 'Loopback request failed. Action Scheduler cannot run on this host until that is fixed.', 'trending-now' ) ),
 			'secret_regenerated' => array( 'success', __( 'Secret regenerated. Update any external caller.', 'trending-now' ) ),
 			'imported'           => array( 'success', __( 'Sources imported.', 'trending-now' ) ),
+			'items_deleted'      => array( 'success', __( 'Items deleted.', 'trending-now' ) ),
+			'nothing_selected'   => array( 'warning', __( 'No items were selected.', 'trending-now' ) ),
+			'filter_required'    => array( 'warning', __( 'Narrow the list with a filter first — use "Delete everything" if you really mean all of it.', 'trending-now' ) ),
 			'import_failed'      => array( 'error', __( 'Import failed. Nothing was changed.', 'trending-now' ) ),
 		);
 

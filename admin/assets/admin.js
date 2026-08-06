@@ -285,6 +285,28 @@
 			} );
 		}
 
+		// Select-all checkbox in the item browser.
+		document.querySelectorAll( '.advtn-check-all' ).forEach( function ( master ) {
+			master.addEventListener( 'change', function () {
+				var table = master.closest( 'table' );
+				if ( ! table ) {
+					return;
+				}
+				table.querySelectorAll( 'input[name="item_ids[]"]' ).forEach( function ( box ) {
+					box.checked = master.checked;
+				} );
+			} );
+		} );
+
+		// Emptying the table deserves more than a single OK.
+		document.querySelectorAll( '.advtn-confirm-hard' ).forEach( function ( button ) {
+			button.addEventListener( 'click', function ( event ) {
+				if ( ! window.confirm( settings.i18n.deleteAll ) ) {
+					event.preventDefault();
+				}
+			} );
+		} );
+
 		document.querySelectorAll( '.advtn-copy' ).forEach( function ( button ) {
 			button.addEventListener( 'click', function () {
 				var field = document.getElementById( button.dataset.target );

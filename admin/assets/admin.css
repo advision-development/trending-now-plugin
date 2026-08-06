@@ -199,3 +199,49 @@
 	flex-basis: 100%;
 	margin: .25em 0 0;
 }
+
+/* Item browser */
+
+.advtn-item-filters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .4em;
+	align-items: center;
+	margin: 1em 0 .75em;
+}
+
+.advtn-items .check-column {
+	width: 2.2em;
+	vertical-align: middle;
+}
+
+.advtn-items td {
+	vertical-align: middle;
+}
+
+.advtn-items .button-link.delete {
+	color: #b32d2e;
+}
+
+.advtn-item-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .5em;
+	align-items: center;
+	margin: .75em 0 2em;
+}
+
+.advtn-item-pager {
+	margin-left: auto;
+}
+
+.advtn-danger {
+	border: 1px solid #d63638;
+	border-radius: 4px;
+	background: #fcf0f1;
+	padding: .9em 1.1em;
+	display: flex;
+	flex-wrap: wrap;
+	gap: .75em;
+	align-items: center;
+}

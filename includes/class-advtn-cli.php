@@ -126,6 +126,88 @@ final class ADVTN_CLI {
 	}
 
 	/**
+	 * Delete stored items.
+	 *
+	 * Sources, settings and secrets are untouched; the next ingest repopulates
+	 * from whatever is still enabled.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--all]
+	 * : Empty the items table.
+	 *
+	 * [--source=<id>]
+	 * : Only items belonging to this source id.
+	 *
+	 * [--host=<host>]
+	 * : Only items on this host, e.g. 127.0.0.1.
+	 *
+	 * [--status=<status>]
+	 * : Only items with this status: active or stale.
+	 *
+	 * [--yes]
+	 * : Skip the confirmation prompt.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp trending-now flush --host=127.0.0.1
+	 *     wp trending-now flush --all --yes
+	 *
+	 * @param array<int,string>    $args       Positional args.
+	 * @param array<string,string> $assoc_args Flags.
+	 * @return void
+	 */
+	public function flush( array $args, array $assoc_args ): void {
+		unset( $args );
+
+		$repository = advtn()->repository();
+
+		$filters = array(
+			'source_id' => isset( $assoc_args['source'] ) ? (string) $assoc_args['source'] : '',
+			'host'      => isset( $assoc_args['host'] ) ? (string) $assoc_args['host'] : '',
+			'status'    => isset( $assoc_args['status'] ) ? (string) $assoc_args['status'] : '',
+		);
+
+		$targeted = ! empty( array_filter( $filters ) );
+		$all      = isset( $assoc_args['all'] );
+
+		if ( ! $all && ! $targeted ) {
+			WP_CLI::error( 'Pass --all, or narrow it with --source, --host or --status.' );
+		}
+
+		$matching = $all ? $repository->counts()['total'] : $repository->count_where( $filters );
+
+		if ( 0 === $matching ) {
+			WP_CLI::success( 'Nothing matched; no rows deleted.' );
+			return;
+		}
+
+		WP_CLI::confirm(
+			sprintf( 'Delete %d item(s)%s?', $matching, $all ? ' (the entire table)' : '' ),
+			$assoc_args
+		);
+
+		if ( $all ) {
+			$repository->delete_all();
+			advtn()->selector()->forget();
+			$deleted = $matching;
+		} else {
+			$deleted = $repository->delete_where( $filters );
+
+			// Drop ids that no longer exist rather than rebuilding, which
+			// would inflate times_shown on every survivor.
+			$live      = advtn()->selector()->current_ids();
+			$surviving = array_map( 'intval', array_column( $repository->get_by_ids( $live ), 'id' ) );
+			advtn()->selector()->forget( array_diff( $live, $surviving ) );
+		}
+
+		advtn()->renderer()->purge_cache();
+		delete_transient( 'advtn_archive_count' );
+
+		WP_CLI::success( sprintf( 'Deleted %d item(s).', $deleted ) );
+	}
+
+	/**
 	 * Release a stuck ingest lock.
 	 *
 	 * @return void
