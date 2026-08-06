@@ -77,6 +77,27 @@ final class ADVTN_Selector {
 			$this->fill( 'any', $remaining, $selected, $source_counts, $cap, $floor );
 		}
 
+		// Last resort: never render fewer items than are available (spec §7.1).
+		// The per-source cap buys diversity across a dozen-odd sources; with
+		// only a few configured — or when pinned items have already eaten a
+		// source's quota — enforcing it would leave slots empty while usable
+		// items sit unselected. Diversity is preferred, not mandatory.
+		$remaining = $limit - count( $selected );
+		if ( $remaining > 0 ) {
+			$relaxed = $this->fill( 'any', $remaining, $selected, $source_counts, PHP_INT_MAX, $floor );
+
+			if ( $relaxed > 0 ) {
+				ADVTN_Logger::log(
+					'debug',
+					'Per-source cap relaxed to fill otherwise-empty slots.',
+					array(
+						'cap'    => $cap,
+						'filled' => $relaxed,
+					)
+				);
+			}
+		}
+
 		$rows = array_values( $selected );
 
 		usort(

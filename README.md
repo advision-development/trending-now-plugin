@@ -39,7 +39,15 @@ they belong to. The tab also exports the source list as JSON and imports it back
 merging on source id or replacing the list outright; every imported row goes through the
 same validation as the form, so bad rows are reported and skipped rather than saved.
 
-**Diagnostics** is where you look when ingestion silently stops.
+**Diagnostics** is where you look when ingestion silently stops. *Run ingest now* fetches
+every source in that one request and rebuilds the selection before the page reloads, so
+the result is visible immediately; the scheduled path stays staggered. If the batch time
+budget runs out, the remaining sources are queued and the panel lists the pending actions
+with their due times.
+
+Note that a **scheduled** cycle changes nothing visible until its finalize action runs —
+that is what rebuilds the selection and busts the render cache — and with a stagger of
+`n` sources that lands roughly `n × stagger + 5` minutes after the trigger.
 
 Three source types:
 

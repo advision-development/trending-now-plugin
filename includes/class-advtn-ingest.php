@@ -131,6 +131,76 @@ final class ADVTN_Ingest {
 	}
 
 	/**
+	 * Run a whole cycle inline and finalize it before returning.
+	 *
+	 * The scheduled path deliberately staggers sources so no single request
+	 * makes a pile of outbound calls. That is wrong for an operator pressing a
+	 * button: they get no visible change for however long the stagger plus the
+	 * finalize buffer adds up to, and on a quiet site the queue may not advance
+	 * at all. This runs sources directly, within the batch time budget, queues
+	 * anything it could not reach, and always finalizes so the widget reflects
+	 * the result immediately.
+	 *
+	 * Failure backoff is ignored: an explicit manual run is a retry request.
+	 *
+	 * @return array{status:string,ran:array<string,int>,failed:array<string,string>,queued:array<int,string>,lock_age_seconds:int|null}
+	 */
+	public function run_now(): array {
+		$response = array(
+			'status'           => 'ok',
+			'ran'              => array(),
+			'failed'           => array(),
+			'queued'           => array(),
+			'lock_age_seconds' => null,
+		);
+
+		if ( ! ADVTN_Lock::acquire() ) {
+			$response['status']           = 'locked';
+			$response['lock_age_seconds'] = ADVTN_Lock::age();
+			return $response;
+		}
+
+		$budget  = $this->settings->get_int( 'batch_time_budget', 5, 120 );
+		$started = microtime( true );
+
+		try {
+			foreach ( $this->cycle_sources() as $source ) {
+				$source_id = (string) ( $source['id'] ?? '' );
+				if ( '' === $source_id ) {
+					continue;
+				}
+
+				if ( ( microtime( true ) - $started ) > $budget ) {
+					advtn()->scheduler()->schedule_single( time(), ADVTN_Scheduler::HOOK_SOURCE, array( $source_id ) );
+					$response['queued'][] = $source_id;
+					continue;
+				}
+
+				$result = $this->run_source( $source_id );
+
+				if ( $result->ok ) {
+					$response['ran'][ $source_id ] = count( $result->items );
+				} else {
+					$response['failed'][ $source_id ] = (string) $result->error;
+				}
+			}
+		} catch ( \Throwable $e ) {
+			ADVTN_Logger::log( 'error', 'Manual ingest run failed.', array( 'error' => $e->getMessage() ) );
+			$response['status'] = 'error';
+		} finally {
+			// Releases the lock, rebuilds the selection and busts the cache.
+			$this->finalize();
+		}
+
+		if ( ! empty( $response['queued'] ) ) {
+			// Those sources land after this finalize, so they need another one.
+			advtn()->scheduler()->schedule_single( time() + 120, ADVTN_Scheduler::HOOK_FINALIZE );
+		}
+
+		return $response;
+	}
+
+	/**
 	 * Fetch one source and write its items. Never throws.
 	 *
 	 * @param string $source_id Source id.

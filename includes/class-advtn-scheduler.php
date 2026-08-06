@@ -136,6 +136,60 @@ final class ADVTN_Scheduler {
 		return is_array( $actions ) ? count( $actions ) : 0;
 	}
 
+	/**
+	 * Pending actions with their due times, for diagnostics.
+	 *
+	 * Without this the queue is invisible: an operator sees "scheduled" and no
+	 * change, with nothing on screen explaining that the work is minutes out.
+	 *
+	 * @return array<int,array{hook:string,args:string,when:string}>
+	 */
+	public function pending_summary(): array {
+		if ( ! function_exists( 'as_get_scheduled_actions' ) ) {
+			return array();
+		}
+
+		$actions = as_get_scheduled_actions(
+			array(
+				'group'    => self::GROUP,
+				'status'   => 'pending',
+				'per_page' => 50,
+				'orderby'  => 'date',
+				'order'    => 'ASC',
+			)
+		);
+
+		if ( ! is_array( $actions ) ) {
+			return array();
+		}
+
+		$out = array();
+
+		foreach ( $actions as $action ) {
+			if ( ! is_object( $action ) || ! method_exists( $action, 'get_hook' ) ) {
+				continue;
+			}
+
+			$when     = '';
+			$schedule = method_exists( $action, 'get_schedule' ) ? $action->get_schedule() : null;
+
+			if ( $schedule && method_exists( $schedule, 'get_date' ) ) {
+				$date = $schedule->get_date();
+				$when = $date ? $date->format( 'Y-m-d H:i:s' ) : '';
+			}
+
+			$args = method_exists( $action, 'get_args' ) ? (array) $action->get_args() : array();
+
+			$out[] = array(
+				'hook' => (string) $action->get_hook(),
+				'args' => implode( ', ', array_map( 'strval', $args ) ),
+				'when' => $when,
+			);
+		}
+
+		return $out;
+	}
+
 	/* ---------------------------------------------------------------------
 	 * Hook callbacks
 	 * ------------------------------------------------------------------ */

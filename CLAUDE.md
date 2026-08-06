@@ -146,6 +146,13 @@ pageview, requiring WP-CLI.
   `advtn_source_map` filter.
 - Selection is deterministic. There is no score column and no relevance model; if you
   find yourself adding one, re-read spec §7.
+- The per-source cap is a *preference*, not a hard limit. `ADVTN_Selector::build()` makes
+  a final pass with the cap lifted, because spec §7.1 also says never render fewer items
+  than are available — with only a few sources configured, or when pinned items have
+  eaten a source's quota, enforcing the cap strictly leaves slots empty.
+- Nothing an ingest writes is visible until `finalize()` runs: it is what commits the
+  selection and busts the render cache. When debugging "my items are not showing", check
+  `advtn_last_ingest` and the lock before suspecting the fetch.
 - Per-site variation is a feature, not drift: `class_prefix`, `widget_limit`,
   `news_share_pct`, `heading_text` and `archive_slug` are meant to differ across the
   network (spec §11).

@@ -311,6 +311,7 @@ final class ADVTN_REST {
 			'wp_cron_enabled'    => ! ( defined( 'DISABLE_WP_CRON' ) && DISABLE_WP_CRON ),
 			'action_scheduler'   => advtn()->scheduler()->has_action_scheduler(),
 			'pending_actions'    => advtn()->scheduler()->pending_count(),
+			'pending_queue'      => advtn()->scheduler()->pending_summary(),
 			'table_exists'       => ADVTN_Schema::table_exists(),
 		);
 	}

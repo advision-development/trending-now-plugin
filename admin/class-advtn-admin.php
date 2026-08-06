@@ -480,8 +480,40 @@ final class ADVTN_Admin {
 
 		switch ( $action ) {
 			case 'run_ingest':
-				$result = advtn()->ingest()->run( true );
-				$notice = 'locked' === $result['status'] ? 'locked' : 'ingest_started';
+				$result = advtn()->ingest()->run_now();
+
+				if ( 'locked' === $result['status'] ) {
+					$notice = 'locked';
+					break;
+				}
+
+				$parts = array();
+
+				foreach ( $result['ran'] as $source_id => $count ) {
+					/* translators: 1: source id, 2: item count. */
+					$parts[] = sprintf( __( '%1$s: %2$d item(s)', 'trending-now' ), $source_id, $count );
+				}
+				foreach ( $result['failed'] as $source_id => $error ) {
+					/* translators: 1: source id, 2: error message. */
+					$parts[] = sprintf( __( '%1$s FAILED — %2$s', 'trending-now' ), $source_id, $error );
+				}
+				if ( ! empty( $result['queued'] ) ) {
+					/* translators: %s: comma-separated source ids. */
+					$parts[] = sprintf( __( 'queued for the background runner (time budget reached): %s', 'trending-now' ), implode( ', ', $result['queued'] ) );
+				}
+
+				set_transient(
+					'advtn_admin_summary',
+					sprintf(
+						/* translators: 1: per-source detail, 2: resulting selection size. */
+						__( 'Ingest complete. %1$s. The live selection now holds %2$d item(s).', 'trending-now' ),
+						empty( $parts ) ? __( 'No enabled sources', 'trending-now' ) : implode( '; ', $parts ),
+						count( advtn()->selector()->current_ids() )
+					),
+					60
+				);
+
+				$notice = empty( $result['failed'] ) ? 'ingest_done' : 'ingest_partial';
 				break;
 
 			case 'rebuild_selection':
@@ -636,7 +668,8 @@ final class ADVTN_Admin {
 		$messages = array(
 			'saved'              => array( 'success', __( 'Saved.', 'trending-now' ) ),
 			'partial'            => array( 'warning', __( 'Saved, but some rows were rejected.', 'trending-now' ) ),
-			'ingest_started'     => array( 'success', __( 'Ingest cycle scheduled.', 'trending-now' ) ),
+			'ingest_done'        => array( 'success', __( 'Ingest cycle ran and finished.', 'trending-now' ) ),
+			'ingest_partial'     => array( 'warning', __( 'Ingest cycle finished, but at least one source failed.', 'trending-now' ) ),
 			'locked'             => array( 'warning', __( 'An ingest cycle is already running.', 'trending-now' ) ),
 			'selection_rebuilt'  => array( 'success', __( 'Selection rebuilt.', 'trending-now' ) ),
 			'cache_purged'       => array( 'success', __( 'Render cache purged.', 'trending-now' ) ),

@@ -44,6 +44,7 @@ $advtn_badge = static function ( bool $value ): string {
 	<?php wp_nonce_field( 'advtn_action' ); ?>
 	<input type="hidden" name="action" value="advtn_action" />
 	<button type="submit" class="button button-primary" name="advtn_do" value="run_ingest"><?php esc_html_e( 'Run ingest now', 'trending-now' ); ?></button>
+	<span class="description advtn-inline-note"><?php esc_html_e( 'Fetches every source in this request and rebuilds the selection before the page reloads.', 'trending-now' ); ?></span>
 	<button type="submit" class="button" name="advtn_do" value="rebuild_selection"><?php esc_html_e( 'Rebuild selection', 'trending-now' ); ?></button>
 	<button type="submit" class="button" name="advtn_do" value="purge_cache"><?php esc_html_e( 'Purge render cache', 'trending-now' ); ?></button>
 	<button type="submit" class="button" name="advtn_do" value="test_loopback"><?php esc_html_e( 'Test loopback', 'trending-now' ); ?></button>
@@ -82,6 +83,23 @@ $advtn_badge = static function ( bool $value ): string {
 		<tr><th><?php esc_html_e( 'Versions', 'trending-now' ); ?></th><td><?php echo esc_html( sprintf( 'plugin %s / db %s', (string) $advtn_status['plugin_version'], (string) $advtn_status['db_version'] ) ); ?></td></tr>
 	</tbody>
 </table>
+
+<?php if ( ! empty( $advtn_status['pending_queue'] ) ) : ?>
+	<h2><?php esc_html_e( 'Queued work', 'trending-now' ); ?></h2>
+	<p class="description"><?php esc_html_e( 'Scheduled actions waiting to run. Sources are staggered, and the selection and render cache only change once the finalize action completes — so the widget will not reflect a scheduled cycle until then.', 'trending-now' ); ?></p>
+	<table class="widefat striped">
+		<thead><tr><th><?php esc_html_e( 'Action', 'trending-now' ); ?></th><th><?php esc_html_e( 'Args', 'trending-now' ); ?></th><th><?php esc_html_e( 'Due (UTC)', 'trending-now' ); ?></th></tr></thead>
+		<tbody>
+			<?php foreach ( (array) $advtn_status['pending_queue'] as $advtn_job ) : ?>
+				<tr>
+					<td><code><?php echo esc_html( (string) $advtn_job['hook'] ); ?></code></td>
+					<td><?php echo esc_html( '' !== $advtn_job['args'] ? (string) $advtn_job['args'] : '—' ); ?></td>
+					<td><?php echo esc_html( '' !== $advtn_job['when'] ? (string) $advtn_job['when'] : '—' ); ?></td>
+				</tr>
+			<?php endforeach; ?>
+		</tbody>
+	</table>
+<?php endif; ?>
 
 <h2><?php esc_html_e( 'Sources', 'trending-now' ); ?></h2>
 <table class="widefat striped">
