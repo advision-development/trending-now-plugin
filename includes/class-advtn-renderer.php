@@ -1,0 +1,401 @@
+<?php
+/**
+ * HTML generation and the render cache.
+ *
+ * Hard constraints: server-side only, zero HTTP requests during render, zero
+ * database queries on a warm cache, and an empty string (not an empty
+ * container) when there is nothing to show.
+ *
+ * @package Advision\TrendingNow
+ */
+
+declare( strict_types=1 );
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+final class ADVTN_Renderer {
+
+	public const CACHE_PREFIX   = 'advtn_render_cache_';
+	public const CACHE_REGISTRY = 'advtn_render_cache_keys';
+	public const MAX_VARIANTS   = 20;
+
+	/**
+	 * Placeholder swapped for the inline stylesheet at output time so the CSS
+	 * is emitted once per page even when the blob is reused.
+	 */
+	private const CSS_MARKER = '<!--advtn:css-->';
+
+	/**
+	 * Whether the inline stylesheet has already gone out this request.
+	 *
+	 * @var bool
+	 */
+	private static bool $css_emitted = false;
+
+	/**
+	 * Settings service.
+	 *
+	 * @var ADVTN_Settings
+	 */
+	private ADVTN_Settings $settings;
+
+	/**
+	 * Repository service.
+	 *
+	 * @var ADVTN_Repository
+	 */
+	private ADVTN_Repository $repository;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param ADVTN_Settings   $settings   Settings service.
+	 * @param ADVTN_Repository $repository Repository service.
+	 */
+	public function __construct( ADVTN_Settings $settings, ADVTN_Repository $repository ) {
+		$this->settings   = $settings;
+		$this->repository = $repository;
+	}
+
+	/**
+	 * Render the widget, using the cache when possible.
+	 *
+	 * @param array<string,mixed> $args Display arguments.
+	 * @return string HTML, or '' when there is nothing to render.
+	 */
+	public function render( array $args = array() ): string {
+		$args = $this->normalize_args( $args );
+		$key  = self::CACHE_PREFIX . md5( (string) wp_json_encode( $args ) );
+
+		$cached = get_option( $key, false );
+
+		if ( is_string( $cached ) ) {
+			return $this->emit( $cached );
+		}
+
+		if ( ! $this->register_variant( $key ) ) {
+			// Over the variant cap: render uncached rather than growing the
+			// registry without bound.
+			ADVTN_Logger::log(
+				'warning',
+				'Render cache variant cap reached; rendering uncached.',
+				array( 'variants' => self::MAX_VARIANTS )
+			);
+
+			return $this->emit( $this->build( $args ) );
+		}
+
+		$html = $this->build( $args );
+
+		update_option( $key, $html, false );
+
+		return $this->emit( $html );
+	}
+
+	/**
+	 * Build HTML directly, bypassing the cache entirely.
+	 *
+	 * @param array<string,mixed> $args Display arguments.
+	 * @return string
+	 */
+	public function render_uncached( array $args = array() ): string {
+		return $this->emit( $this->build( $this->normalize_args( $args ) ) );
+	}
+
+	/**
+	 * Delete every cached variant and reset the registry.
+	 *
+	 * @return int Number of keys deleted.
+	 */
+	public function purge_cache(): int {
+		$keys = get_option( self::CACHE_REGISTRY, array() );
+		$keys = is_array( $keys ) ? $keys : array();
+
+		foreach ( $keys as $key ) {
+			delete_option( (string) $key );
+		}
+
+		update_option( self::CACHE_REGISTRY, array(), false );
+
+		return count( $keys );
+	}
+
+	/**
+	 * Cached variants with their byte sizes, for diagnostics.
+	 *
+	 * @return array<string,int>
+	 */
+	public function cache_status(): array {
+		$keys = get_option( self::CACHE_REGISTRY, array() );
+		$keys = is_array( $keys ) ? $keys : array();
+
+		$out = array();
+		foreach ( $keys as $key ) {
+			$value       = get_option( (string) $key, '' );
+			$out[ $key ] = is_string( $value ) ? strlen( $value ) : 0;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Canonical, order-stable argument set. Also the cache key input.
+	 *
+	 * @param array<string,mixed> $args Raw arguments.
+	 * @return array<string,mixed>
+	 */
+	public function normalize_args( array $args ): array {
+		$defaults = array(
+			'limit'        => $this->settings->get_int( 'widget_limit', 1, 200 ),
+			'layout'       => 'list',
+			'heading'      => $this->settings->get_string( 'heading_text' ),
+			'show_images'  => false,
+			'show_source'  => true,
+			'show_date'    => true,
+			'show_see_all' => true,
+		);
+
+		$args = array_merge( $defaults, array_intersect_key( $args, $defaults ) );
+
+		$args['limit']        = max( 1, min( 200, (int) $args['limit'] ) );
+		$args['layout']       = in_array( $args['layout'], array( 'list', 'cards' ), true ) ? $args['layout'] : 'list';
+		$args['heading']      = sanitize_text_field( (string) $args['heading'] );
+		$args['show_images']  = $this->to_bool( $args['show_images'] );
+		$args['show_source']  = $this->to_bool( $args['show_source'] );
+		$args['show_date']    = $this->to_bool( $args['show_date'] );
+		$args['show_see_all'] = $this->to_bool( $args['show_see_all'] );
+
+		ksort( $args );
+
+		return $args;
+	}
+
+	/**
+	 * Escaped anchor attributes for one item.
+	 *
+	 * `rel` is applied only to news items and only when configured. Network
+	 * links stay plain followed links — that is the entire point of the plugin.
+	 *
+	 * @param array<string,mixed> $item Item row.
+	 * @return string Leading-space-prefixed attribute string.
+	 */
+	public function link_attributes( array $item ): string {
+		$attrs = array();
+		$rel   = array();
+
+		if ( 'gdelt' === ( $item['source_type'] ?? '' ) ) {
+			$configured = $this->settings->get_string( 'link_rel_external' );
+			if ( '' !== $configured ) {
+				$rel[] = $configured;
+			}
+		}
+
+		if ( $this->settings->get_bool( 'link_target_blank' ) ) {
+			$attrs[] = 'target="_blank"';
+			$rel[]   = 'noopener';
+		}
+
+		if ( ! empty( $rel ) ) {
+			$attrs[] = 'rel="' . esc_attr( implode( ' ', array_unique( $rel ) ) ) . '"';
+		}
+
+		return empty( $attrs ) ? '' : ' ' . implode( ' ', $attrs );
+	}
+
+	/**
+	 * Machine-readable and human date pair for an item.
+	 *
+	 * @param array<string,mixed> $item Item row.
+	 * @return array{iso:string,label:string}|null
+	 */
+	public function item_date( array $item ): ?array {
+		$published = (string) ( $item['published_at'] ?? '' );
+		if ( '' === $published ) {
+			return null;
+		}
+
+		$timestamp = strtotime( $published . ' UTC' );
+		if ( false === $timestamp ) {
+			return null;
+		}
+
+		return array(
+			'iso'   => gmdate( 'c', $timestamp ),
+			'label' => (string) wp_date( 'M j', $timestamp ),
+		);
+	}
+
+	/**
+	 * URL of the "see all" archive, or '' when the archive is disabled.
+	 *
+	 * @return string
+	 */
+	public function archive_url(): string {
+		if ( ! $this->settings->get_bool( 'archive_enabled' ) ) {
+			return '';
+		}
+
+		return home_url( '/' . $this->settings->get_string( 'archive_slug' ) . '/' );
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Internals
+	 * ------------------------------------------------------------------ */
+
+	/**
+	 * Produce the cacheable blob: template output with a CSS placeholder.
+	 *
+	 * @param array<string,mixed> $args Normalized arguments.
+	 * @return string
+	 */
+	private function build( array $args ): string {
+		$rows = advtn()->selector()->current_rows();
+
+		if ( empty( $rows ) ) {
+			// No committed selection yet — fall back to a direct query rather
+			// than rendering nothing on a fresh install.
+			$rows = $this->repository->recent_active( $args['limit'] );
+		}
+
+		if ( empty( $rows ) ) {
+			return '';
+		}
+
+		$items = array_slice( $rows, 0, $args['limit'] );
+
+		$template = $this->locate_template( 'widget-' . $args['layout'] . '.php' );
+		if ( '' === $template ) {
+			return '';
+		}
+
+		$prefix      = $this->settings->get_string( 'class_prefix' );
+		$heading_id  = $prefix . '-heading-' . substr( md5( (string) wp_json_encode( $args ) ), 0, 4 );
+		$archive_url = $args['show_see_all'] ? $this->archive_url() : '';
+		$renderer    = $this;
+		$settings    = $this->settings;
+
+		ob_start();
+		include $template;
+		$html = (string) ob_get_clean();
+
+		$html = trim( $html );
+
+		return '' === $html ? '' : self::CSS_MARKER . $html;
+	}
+
+	/**
+	 * Swap the CSS placeholder for the stylesheet, once per request.
+	 *
+	 * @param string $html Cached or freshly built blob.
+	 * @return string
+	 */
+	private function emit( string $html ): string {
+		if ( '' === $html ) {
+			return '';
+		}
+
+		if ( self::$css_emitted ) {
+			return str_replace( self::CSS_MARKER, '', $html );
+		}
+
+		self::$css_emitted = true;
+
+		return str_replace( self::CSS_MARKER, $this->css(), $html );
+	}
+
+	/**
+	 * Add a cache key to the registry, refusing past the variant cap.
+	 *
+	 * @param string $key Option key.
+	 * @return bool False when the cap is reached.
+	 */
+	private function register_variant( string $key ): bool {
+		$keys = get_option( self::CACHE_REGISTRY, array() );
+		$keys = is_array( $keys ) ? $keys : array();
+
+		if ( in_array( $key, $keys, true ) ) {
+			return true;
+		}
+
+		if ( count( $keys ) >= self::MAX_VARIANTS ) {
+			return false;
+		}
+
+		$keys[] = $key;
+		update_option( self::CACHE_REGISTRY, $keys, false );
+
+		return true;
+	}
+
+	/**
+	 * Resolve a template, preferring a theme override.
+	 *
+	 * @param string $file Template filename.
+	 * @return string Absolute path, or '' when missing.
+	 */
+	public function locate_template( string $file ): string {
+		$override = locate_template( array( 'trending-now/' . $file ) );
+
+		if ( $override ) {
+			return $override;
+		}
+
+		$path = ADVTN_PATH . 'templates/' . $file;
+
+		return is_readable( $path ) ? $path : '';
+	}
+
+	/**
+	 * Inline stylesheet, generated from the configured class prefix.
+	 *
+	 * Inlined rather than enqueued because the prefix is per-site and because
+	 * the homepage should not pay for an extra HTTP request.
+	 *
+	 * @return string
+	 */
+	public function css(): string {
+		$p = $this->settings->get_string( 'class_prefix' );
+
+		$css = ".{$p}{margin:2rem 0}"
+			. ".{$p}__heading{margin:0 0 .75rem}"
+			. ".{$p}__items{list-style:none;margin:0;padding:0;display:grid;gap:.5rem}"
+			. ".{$p}--cards .{$p}__items{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem}"
+			. ".{$p}__item{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem .6rem;line-height:1.4}"
+			. ".{$p}--cards .{$p}__item{display:block}"
+			. ".{$p}__link{font-weight:600;text-decoration:none}"
+			. ".{$p}__link:hover,.{$p}__link:focus{text-decoration:underline}"
+			. ".{$p}__source,.{$p}__date{font-size:.8em;opacity:.7}"
+			. ".{$p}__excerpt{flex-basis:100%;margin:.15rem 0 0;font-size:.9em;opacity:.85}"
+			. ".{$p}__thumb{display:block;width:100%;height:auto;margin-bottom:.5rem;border-radius:4px}"
+			. ".{$p}__more{margin:1rem 0 0}"
+			. "@media(max-width:600px){.{$p}__item{gap:.25rem .5rem}}";
+
+		/**
+		 * Filters the inline widget stylesheet.
+		 *
+		 * @param string $css    Generated CSS.
+		 * @param string $prefix Class prefix.
+		 */
+		$css = trim( (string) apply_filters( 'advtn_inline_css', $css, $p ) );
+
+		// Filtering this to '' suppresses the tag entirely, for anyone who
+		// would rather enqueue assets/css/trending-now.css themselves.
+		return '' === $css ? '' : '<style id="' . esc_attr( $p ) . '-inline-css">' . $css . '</style>';
+	}
+
+	/**
+	 * Coerce shortcode-style truthy values.
+	 *
+	 * @param mixed $value Raw value.
+	 * @return bool
+	 */
+	private function to_bool( $value ): bool {
+		if ( is_bool( $value ) ) {
+			return $value;
+		}
+
+		return in_array( strtolower( (string) $value ), array( '1', 'true', 'yes', 'on' ), true );
+	}
+}

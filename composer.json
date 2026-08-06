@@ -1,0 +1,19 @@
+{
+    "name": "advision-development/trending-now-plugin",
+    "description": "Server-rendered Trending Now link block for WordPress, aggregated from owned sites and GDELT news sources.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=8.1",
+        "woocommerce/action-scheduler": "^3.8"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "allow-plugins": {
+            "composer/installers": true
+        }
+    },
+    "scripts": {
+        "test": "php tests/run.php"
+    }
+}

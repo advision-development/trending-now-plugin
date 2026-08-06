@@ -1,0 +1,163 @@
+/* Trending Now admin styles. */
+
+.advtn-admin .advtn-inline-form {
+	margin: 1em 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: .5em;
+}
+
+.advtn-admin h2 {
+	margin-top: 2em;
+}
+
+.advtn-kv th {
+	width: 260px;
+	text-align: left;
+}
+
+.advtn-badge {
+	display: inline-block;
+	padding: 0 .5em;
+	border-radius: 3px;
+	font-size: 11px;
+	line-height: 1.8;
+	text-transform: uppercase;
+	letter-spacing: .03em;
+}
+
+.advtn-badge--ok {
+	background: #d5f5e3;
+	color: #14562f;
+}
+
+.advtn-badge--bad {
+	background: #fadbd8;
+	color: #7b241c;
+}
+
+.advtn-row--error td {
+	background: #fef6f5;
+}
+
+.advtn-log code {
+	font-size: 11px;
+	word-break: break-all;
+}
+
+.advtn-log--error td {
+	background: #fef6f5;
+}
+
+.advtn-log--warning td {
+	background: #fffaf0;
+}
+
+.advtn-log-filter {
+	display: flex;
+	gap: .35em;
+	align-items: center;
+}
+
+/* Sources */
+
+.advtn-source {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	margin: 0 0 1em;
+	padding: .75em 1em 1em;
+}
+
+.advtn-source.is-dragging {
+	opacity: .5;
+}
+
+.advtn-source__bar {
+	display: flex;
+	align-items: center;
+	gap: .6em;
+	margin-bottom: .75em;
+	padding-bottom: .5em;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.advtn-source__handle {
+	cursor: grab;
+	color: #8c8f94;
+	letter-spacing: -2px;
+}
+
+.advtn-source__spacer {
+	flex: 1;
+}
+
+.advtn-source__id,
+.advtn-source__count {
+	font-size: 11px;
+	color: #646970;
+}
+
+.advtn-source__grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: .75em 1em;
+}
+
+.advtn-source__grid label {
+	display: flex;
+	flex-direction: column;
+	gap: .2em;
+	font-size: 12px;
+}
+
+.advtn-source__grid label > span {
+	font-weight: 600;
+}
+
+.advtn-source__grid label > em {
+	font-style: normal;
+	color: #646970;
+	font-size: 11px;
+}
+
+.advtn-source__grid .advtn-wide {
+	grid-column: 1 / -1;
+}
+
+.advtn-source__grid .advtn-check {
+	flex-direction: row;
+	align-items: center;
+	gap: .4em;
+	align-self: end;
+	padding-bottom: .4em;
+}
+
+.advtn-source__foot {
+	display: flex;
+	align-items: center;
+	gap: 1em;
+	margin-top: 1em;
+	flex-wrap: wrap;
+}
+
+.advtn-source__error {
+	color: #b32d2e;
+	font-size: 12px;
+}
+
+.advtn-delete {
+	font-size: 12px;
+	color: #b32d2e;
+}
+
+.advtn-test-result {
+	margin-top: .75em;
+	padding: .75em;
+	background: #f6f7f7;
+	border-left: 3px solid #2271b1;
+	font-family: Menlo, Consolas, monospace;
+	font-size: 11px;
+	white-space: pre-wrap;
+	word-break: break-word;
+}

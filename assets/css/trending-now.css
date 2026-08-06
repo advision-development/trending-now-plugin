@@ -1,0 +1,85 @@
+/*
+ * Reference copy of the widget styles.
+ *
+ * This file is NOT enqueued. The runtime stylesheet is generated from the
+ * configured class prefix and inlined once per page inside the cached HTML
+ * blob (see ADVTN_Renderer::css()), because the prefix is per-site and the
+ * homepage should not pay for an extra HTTP request.
+ *
+ * Copy this into your theme and change `advtn` to your prefix if you want to
+ * override the defaults; or filter `advtn_inline_css`.
+ */
+
+.advtn {
+	margin: 2rem 0;
+}
+
+.advtn__heading {
+	margin: 0 0 .75rem;
+}
+
+.advtn__items {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: .5rem;
+}
+
+.advtn--cards .advtn__items {
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 1rem;
+}
+
+.advtn__item {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: .4rem .6rem;
+	line-height: 1.4;
+}
+
+.advtn--cards .advtn__item {
+	display: block;
+}
+
+.advtn__link {
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.advtn__link:hover,
+.advtn__link:focus {
+	text-decoration: underline;
+}
+
+.advtn__source,
+.advtn__date {
+	font-size: .8em;
+	opacity: .7;
+}
+
+.advtn__excerpt {
+	flex-basis: 100%;
+	margin: .15rem 0 0;
+	font-size: .9em;
+	opacity: .85;
+}
+
+.advtn__thumb {
+	display: block;
+	width: 100%;
+	height: auto;
+	margin-bottom: .5rem;
+	border-radius: 4px;
+}
+
+.advtn__more {
+	margin: 1rem 0 0;
+}
+
+@media (max-width: 600px) {
+	.advtn__item {
+		gap: .25rem .5rem;
+	}
+}

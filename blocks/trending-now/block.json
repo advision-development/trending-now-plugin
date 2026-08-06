@@ -1,0 +1,46 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "advision/trending-now",
+	"title": "Trending Now",
+	"category": "widgets",
+	"icon": "chart-line",
+	"description": "Server-rendered list of trending links from the network and news sources.",
+	"textdomain": "trending-now",
+	"editorScript": "advtn-block-editor",
+	"keywords": [ "trending", "links", "news", "aggregator" ],
+	"supports": {
+		"html": false,
+		"align": [ "wide", "full" ],
+		"anchor": true
+	},
+	"attributes": {
+		"limit": {
+			"type": "number"
+		},
+		"layout": {
+			"type": "string",
+			"default": "list",
+			"enum": [ "list", "cards" ]
+		},
+		"heading": {
+			"type": "string"
+		},
+		"showImages": {
+			"type": "boolean",
+			"default": false
+		},
+		"showSource": {
+			"type": "boolean",
+			"default": true
+		},
+		"showDate": {
+			"type": "boolean",
+			"default": true
+		},
+		"showSeeAll": {
+			"type": "boolean",
+			"default": true
+		}
+	}
+}
