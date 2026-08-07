@@ -5,6 +5,16 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`show_excerpt`** on the shortcode, the block and the display settings, available in
+  all three layouts and on the archive. Off by default: plenty of sources return no
+  excerpt at all, so switching it on globally would give a ragged mix of items with and
+  without. `show_icons` is now exposed on the shortcode and block too, which it should
+  have been when it was added.
+
 ## [1.1.2] — 2026-08-07
 
 ### Fixed

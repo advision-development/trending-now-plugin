@@ -50,6 +50,9 @@ $p = $prefix;
 				<?php if ( null !== $date ) : ?>
 					<time class="<?php echo esc_attr( $p ); ?>__date" datetime="<?php echo esc_attr( $date['iso'] ); ?>"><?php echo esc_html( $date['label'] ); ?></time>
 				<?php endif; ?>
+				<?php if ( $args['show_excerpt'] && ! empty( $item['excerpt'] ) ) : ?>
+					<p class="<?php echo esc_attr( $p ); ?>__excerpt"><?php echo esc_html( (string) $item['excerpt'] ); ?></p>
+				<?php endif; ?>
 			</li>
 		<?php endforeach; ?>
 	</ul>

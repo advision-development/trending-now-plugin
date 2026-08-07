@@ -163,11 +163,16 @@ Three entry points, one renderer.
 Gutenberg, classic widgets and theme templates:
 
 ```
-[trending_now limit="30" layout="list" heading="Trending Now"
-              show_images="0" show_source="1" show_date="1" show_see_all="1"]
+[trending_now limit="30" layout="news" heading="Trending Now"
+              show_images="1" show_source="1" show_date="1"
+              show_icons="0" show_excerpt="0" show_see_all="1"]
 ```
 
 **Block** — *Trending Now*, with the same options in the inspector.
+
+Every display attribute is optional. Omit one and it inherits the setting; supply it and
+it wins for that instance. Off by default for excerpts, since not every source provides
+one — GDELT never did, and Google News does not either.
 
 Three layouts, and **`news` is the default** — what you get with a bare `[trending_now]`.
 It is the Google News / MSN style: source name and a relative
@@ -436,6 +441,7 @@ crawled most often — that is where this earns its keep.
 | `layout` | `news` | `list` · `news` · `cards`. Default for shortcode, block and template tag |
 | `show_images` / `show_source` / `show_date` | on / on / on | Display defaults |
 | `show_icons` | off | Publisher favicon beside the source name |
+| `show_excerpt` | off | Excerpt under the headline |
 | `date_style` | `relative` | `relative` (45m, 6h, then a date) · `date` (always a date) |
 | `news_share_pct` | 20 | 0–50. Slots reserved for third-party news |
 | `max_source_share_pct` | 20 | 5–100. Soft cap per source |

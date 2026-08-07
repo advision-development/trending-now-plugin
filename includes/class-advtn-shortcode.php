@@ -58,6 +58,8 @@ final class ADVTN_Shortcode {
 				'show_images'  => '',
 				'show_source'  => '',
 				'show_date'    => '',
+				'show_icons'   => '',
+				'show_excerpt' => '',
 				'show_see_all' => '1',
 			),
 			is_array( $atts ) ? $atts : array(),
@@ -68,7 +70,7 @@ final class ADVTN_Shortcode {
 
 		// Anything left at its default falls through to the Settings value
 		// rather than silently overriding it.
-		foreach ( array( 'layout', 'show_images', 'show_source', 'show_date' ) as $key ) {
+		foreach ( array( 'layout', 'show_images', 'show_source', 'show_date', 'show_icons', 'show_excerpt' ) as $key ) {
 			if ( '' !== (string) $atts[ $key ] ) {
 				$args[ $key ] = $atts[ $key ];
 			}

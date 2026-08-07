@@ -86,7 +86,7 @@ final class ADVTN_Block {
 		if ( ! empty( $attributes['layout'] ) ) {
 			$args['layout'] = (string) $attributes['layout'];
 		}
-		foreach ( array( 'showImages' => 'show_images', 'showSource' => 'show_source', 'showDate' => 'show_date' ) as $attr => $key ) {
+		foreach ( array( 'showImages' => 'show_images', 'showSource' => 'show_source', 'showDate' => 'show_date', 'showIcons' => 'show_icons', 'showExcerpt' => 'show_excerpt' ) as $attr => $key ) {
 			if ( isset( $attributes[ $attr ] ) ) {
 				$args[ $key ] = (bool) $attributes[ $attr ];
 			}

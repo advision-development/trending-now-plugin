@@ -156,6 +156,7 @@ final class ADVTN_Renderer {
 			'show_images'  => $this->settings->get_bool( 'show_images' ),
 			'show_source'  => $this->settings->get_bool( 'show_source' ),
 			'show_icons'   => $this->settings->get_bool( 'show_icons' ),
+			'show_excerpt' => $this->settings->get_bool( 'show_excerpt' ),
 			'show_date'    => $this->settings->get_bool( 'show_date' ),
 			'show_see_all' => true,
 		);
@@ -168,6 +169,7 @@ final class ADVTN_Renderer {
 		$args['show_images']  = $this->to_bool( $args['show_images'] );
 		$args['show_source']  = $this->to_bool( $args['show_source'] );
 		$args['show_icons']   = $this->to_bool( $args['show_icons'] );
+		$args['show_excerpt'] = $this->to_bool( $args['show_excerpt'] );
 		$args['show_date']    = $this->to_bool( $args['show_date'] );
 		$args['show_see_all'] = $this->to_bool( $args['show_see_all'] );
 
@@ -513,6 +515,7 @@ final class ADVTN_Renderer {
 			. ".{$p}.{$p}--news .{$p}__source{font-weight:600}"
 			. ".{$p}.{$p}--news .{$p}__source+.{$p}__date::before{content:'\u{b7}';margin-right:.4rem;opacity:.7}"
 			. ".{$p}.{$p}--news .{$p}__link{display:block;font-size:1.02em;font-weight:600;line-height:1.35}"
+			. ".{$p}.{$p}--news .{$p}__excerpt{margin:.3rem 0 0;font-size:.85em;opacity:.75;line-height:1.4}"
 			. ".{$p}.{$p}--news .{$p}__media{flex:0 0 auto;width:120px;margin:0}"
 			. ".{$p}.{$p}--news .{$p}__thumb{display:block;width:120px;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin:0}"
 			. "@media(max-width:480px){.{$p}.{$p}--news .{$p}__media,.{$p}.{$p}--news .{$p}__thumb{width:88px}}"

@@ -37,6 +37,12 @@
 			"type": "boolean",
 			"default": true
 		},
+		"showIcons": {
+			"type": "boolean"
+		},
+		"showExcerpt": {
+			"type": "boolean"
+		},
 		"showSeeAll": {
 			"type": "boolean",
 			"default": true

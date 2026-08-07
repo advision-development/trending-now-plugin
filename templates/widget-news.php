@@ -60,6 +60,10 @@ $p = $prefix;
 					<?php endif; ?>
 
 					<a class="<?php echo esc_attr( $p ); ?>__link" href="<?php echo esc_url( (string) $item['url'] ); ?>"<?php echo $renderer->link_attributes( $item ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in link_attributes(). ?>><?php echo esc_html( (string) $item['title'] ); ?></a>
+
+					<?php if ( $args['show_excerpt'] && ! empty( $item['excerpt'] ) ) : ?>
+						<p class="<?php echo esc_attr( $p ); ?>__excerpt"><?php echo esc_html( (string) $item['excerpt'] ); ?></p>
+					<?php endif; ?>
 				</div>
 
 				<?php if ( '' !== $thumb ) : ?>

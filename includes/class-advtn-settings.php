@@ -41,6 +41,7 @@ final class ADVTN_Settings {
 			'show_images'              => true,
 			'show_source'              => true,
 			'show_icons'               => false,
+			'show_excerpt'             => false,
 			'show_date'                => true,
 			'date_style'               => 'relative',
 			'news_share_pct'           => 20,
@@ -239,6 +240,7 @@ final class ADVTN_Settings {
 		$out['show_images'] = ! empty( $input['show_images'] );
 		$out['show_source'] = ! empty( $input['show_source'] );
 		$out['show_icons']  = ! empty( $input['show_icons'] );
+		$out['show_excerpt'] = ! empty( $input['show_excerpt'] );
 		$out['show_date']   = ! empty( $input['show_date'] );
 
 		$style             = (string) ( $input['date_style'] ?? $d['date_style'] );

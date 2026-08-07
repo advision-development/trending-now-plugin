@@ -30,6 +30,7 @@ $advtn_show_images = $advtn_settings->get_bool( 'show_images' );
 $advtn_show_icons  = $advtn_settings->get_bool( 'show_icons' );
 $advtn_show_source = $advtn_settings->get_bool( 'show_source' );
 $advtn_show_date   = $advtn_settings->get_bool( 'show_date' );
+$advtn_show_excerpt = $advtn_settings->get_bool( 'show_excerpt' );
 
 $advtn_archive->render_header();
 
@@ -87,7 +88,7 @@ echo $advtn_renderer->inline_css_once(); // phpcs:ignore WordPress.Security.Esca
 
 							<a class="<?php echo esc_attr( $advtn_prefix ); ?>__link" href="<?php echo esc_url( (string) $advtn_item['url'] ); ?>"<?php echo $advtn_renderer->link_attributes( $advtn_item ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in link_attributes(). ?>><?php echo esc_html( (string) $advtn_item['title'] ); ?></a>
 
-							<?php if ( ! empty( $advtn_item['excerpt'] ) ) : ?>
+							<?php if ( $advtn_show_excerpt && ! empty( $advtn_item['excerpt'] ) ) : ?>
 								<p class="<?php echo esc_attr( $advtn_prefix ); ?>__excerpt"><?php echo esc_html( (string) $advtn_item['excerpt'] ); ?></p>
 							<?php endif; ?>
 						</div>

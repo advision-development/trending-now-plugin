@@ -102,6 +102,7 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 				<label><input type="checkbox" name="advtn[show_images]" value="1" <?php checked( ! empty( $advtn_s['show_images'] ) ); ?> /> <?php esc_html_e( 'Thumbnails', 'trending-now' ); ?></label><br />
 				<label><input type="checkbox" name="advtn[show_source]" value="1" <?php checked( ! empty( $advtn_s['show_source'] ) ); ?> /> <?php esc_html_e( 'Source name', 'trending-now' ); ?></label><br />
 				<label><input type="checkbox" name="advtn[show_icons]" value="1" <?php checked( ! empty( $advtn_s['show_icons'] ) ); ?> /> <?php esc_html_e( 'Site icons beside the source name', 'trending-now' ); ?></label><br />
+				<label><input type="checkbox" name="advtn[show_excerpt]" value="1" <?php checked( ! empty( $advtn_s['show_excerpt'] ) ); ?> /> <?php esc_html_e( 'Excerpt', 'trending-now' ); ?></label><br />
 				<label><input type="checkbox" name="advtn[show_date]" value="1" <?php checked( ! empty( $advtn_s['show_date'] ) ); ?> /> <?php esc_html_e( 'Timestamp', 'trending-now' ); ?></label>
 				<p style="margin:.5em 0 0">
 					<label for="advtn-date-style"><strong><?php esc_html_e( 'Timestamp style', 'trending-now' ); ?></strong></label><br />
