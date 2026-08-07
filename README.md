@@ -175,6 +175,14 @@ so they reserve their space instead of shifting the layout, and everything below
 card is lazy-loaded — the first is fetched eagerly because it is usually the one above the
 fold. **`list`** is compact text links, **`cards`** a grid with excerpts.
 
+Enabling **site icons** puts a publisher favicon beside each source name, as in the
+Google News and MSN feeds. The URL is derived from the stored host — a news API's own
+`icon` field turns out to be exactly that anyway — so it costs no ingest work and covers
+your own sites as well as third-party ones. The image is fetched by the visitor's browser,
+not the server, so the no-HTTP-during-render rule still holds; it does mean Google's
+favicon service sees your visitors, which is why it is off by default. Filter
+`advtn_source_icon_url` to self-host or swap providers.
+
 Timestamps are relative inside the last day — `45m`, `6h` — and a date before that, which
 is what makes a feed read as current at a glance. The `datetime` attribute is always the
 full ISO timestamp.
@@ -412,6 +420,7 @@ crawled most often — that is where this earns its keep.
 | `max_age_hours` | 0 | 0–720. Hide anything older. `48` = nothing over two days |
 | `layout` | `list` | `list` · `news` · `cards`. Default for shortcode, block and template tag |
 | `show_images` / `show_source` / `show_date` | off / on / on | Display defaults |
+| `show_icons` | off | Publisher favicon beside the source name |
 | `news_share_pct` | 20 | 0–50. Slots reserved for third-party news |
 | `max_source_share_pct` | 20 | 5–100. Soft cap per source |
 | `exposure_floor_days` | 3 | Guaranteed consecutive days once shown |
@@ -461,6 +470,7 @@ note so an empty box is not mistaken for an unset key.
 |---|---|---|
 | `advtn_source_map` | filter | Register an additional source type |
 | `advtn_inline_css` | filter | Replace or suppress the generated stylesheet |
+| `advtn_source_icon_url` | filter | Change or suppress the publisher favicon URL |
 | `advtn_ingest_cycle` | action | Hourly due-check |
 | `advtn_ingest_source` | action | Ingest one source (`$source_id`) |
 | `advtn_finalize_cycle` | action | Prune, select, render, unlock |

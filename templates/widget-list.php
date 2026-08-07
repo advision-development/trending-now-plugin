@@ -38,6 +38,12 @@ $p = $prefix;
 					<img class="<?php echo esc_attr( $p ); ?>__thumb" src="<?php echo esc_url( (string) $item['image_url'] ); ?>" alt="" loading="lazy" decoding="async" />
 				<?php endif; ?>
 				<a class="<?php echo esc_attr( $p ); ?>__link" href="<?php echo esc_url( (string) $item['url'] ); ?>"<?php echo $renderer->link_attributes( $item ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- attributes are escaped in link_attributes(). ?>><?php echo esc_html( (string) $item['title'] ); ?></a>
+				<?php
+				$advtn_icon = $args['show_icons'] ? $renderer->source_icon( $item ) : '';
+				if ( '' !== $advtn_icon ) :
+					?>
+					<img class="<?php echo esc_attr( $p ); ?>__icon" src="<?php echo esc_url( $advtn_icon ); ?>" alt="" width="16" height="16" loading="lazy" decoding="async" />
+				<?php endif; ?>
 				<?php if ( $args['show_source'] && ! empty( $item['site_name'] ) ) : ?>
 					<span class="<?php echo esc_attr( $p ); ?>__source"><?php echo esc_html( (string) $item['site_name'] ); ?></span>
 				<?php endif; ?>

@@ -101,8 +101,10 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 			<td>
 				<label><input type="checkbox" name="advtn[show_images]" value="1" <?php checked( ! empty( $advtn_s['show_images'] ) ); ?> /> <?php esc_html_e( 'Thumbnails', 'trending-now' ); ?></label><br />
 				<label><input type="checkbox" name="advtn[show_source]" value="1" <?php checked( ! empty( $advtn_s['show_source'] ) ); ?> /> <?php esc_html_e( 'Source name', 'trending-now' ); ?></label><br />
+				<label><input type="checkbox" name="advtn[show_icons]" value="1" <?php checked( ! empty( $advtn_s['show_icons'] ) ); ?> /> <?php esc_html_e( 'Site icons beside the source name', 'trending-now' ); ?></label><br />
 				<label><input type="checkbox" name="advtn[show_date]" value="1" <?php checked( ! empty( $advtn_s['show_date'] ) ); ?> /> <?php esc_html_e( 'Timestamp', 'trending-now' ); ?></label>
 				<p class="description"><?php esc_html_e( 'Thumbnails are lazy-loaded below the first card and carry fixed dimensions, so they do not shift the layout as they arrive. Timestamps show as 45m or 6h within the last day, and a date before that.', 'trending-now' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Site icons are fetched by the visitor\'s browser from Google\'s favicon service, which means that service sees your visitors. Filter advtn_source_icon_url to self-host them or use another provider.', 'trending-now' ); ?></p>
 			</td>
 		</tr>
 		<tr>

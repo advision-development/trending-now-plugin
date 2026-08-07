@@ -41,6 +41,12 @@ $p = $prefix;
 				<?php if ( ! empty( $item['excerpt'] ) ) : ?>
 					<p class="<?php echo esc_attr( $p ); ?>__excerpt"><?php echo esc_html( (string) $item['excerpt'] ); ?></p>
 				<?php endif; ?>
+				<?php
+				$advtn_icon = $args['show_icons'] ? $renderer->source_icon( $item ) : '';
+				if ( '' !== $advtn_icon ) :
+					?>
+					<img class="<?php echo esc_attr( $p ); ?>__icon" src="<?php echo esc_url( $advtn_icon ); ?>" alt="" width="16" height="16" loading="lazy" decoding="async" />
+				<?php endif; ?>
 				<?php if ( $args['show_source'] && ! empty( $item['site_name'] ) ) : ?>
 					<span class="<?php echo esc_attr( $p ); ?>__source"><?php echo esc_html( (string) $item['site_name'] ); ?></span>
 				<?php endif; ?>

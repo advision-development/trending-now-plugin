@@ -191,7 +191,7 @@ final class ADVTN_Admin {
 		// An unchecked checkbox posts nothing, and update() merges over the
 		// current values — so absence has to be made explicit or a box can
 		// never be turned back off.
-		foreach ( array( 'archive_noindex', 'archive_enabled', 'link_target_blank', 'delete_data_on_uninstall', 'auto_update', 'show_images', 'show_source', 'show_date' ) as $flag ) {
+		foreach ( array( 'archive_noindex', 'archive_enabled', 'link_target_blank', 'delete_data_on_uninstall', 'auto_update', 'show_images', 'show_source', 'show_date', 'show_icons' ) as $flag ) {
 			$raw[ $flag ] = ! empty( $raw[ $flag ] );
 		}
 

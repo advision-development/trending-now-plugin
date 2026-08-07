@@ -37,6 +37,7 @@ final class ADVTN_Settings {
 			'layout'                   => 'list',
 			'show_images'              => false,
 			'show_source'              => true,
+			'show_icons'               => false,
 			'show_date'                => true,
 			'news_share_pct'           => 20,
 			'max_source_share_pct'     => 20,
@@ -233,6 +234,7 @@ final class ADVTN_Settings {
 
 		$out['show_images'] = ! empty( $input['show_images'] );
 		$out['show_source'] = ! empty( $input['show_source'] );
+		$out['show_icons']  = ! empty( $input['show_icons'] );
 		$out['show_date']   = ! empty( $input['show_date'] );
 
 		$out['archive_noindex']          = ! empty( $input['archive_noindex'] );

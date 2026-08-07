@@ -155,6 +155,7 @@ final class ADVTN_Renderer {
 			'heading'      => $this->settings->get_string( 'heading_text' ),
 			'show_images'  => $this->settings->get_bool( 'show_images' ),
 			'show_source'  => $this->settings->get_bool( 'show_source' ),
+			'show_icons'   => $this->settings->get_bool( 'show_icons' ),
 			'show_date'    => $this->settings->get_bool( 'show_date' ),
 			'show_see_all' => true,
 		);
@@ -166,6 +167,7 @@ final class ADVTN_Renderer {
 		$args['heading']      = sanitize_text_field( (string) $args['heading'] );
 		$args['show_images']  = $this->to_bool( $args['show_images'] );
 		$args['show_source']  = $this->to_bool( $args['show_source'] );
+		$args['show_icons']   = $this->to_bool( $args['show_icons'] );
 		$args['show_date']    = $this->to_bool( $args['show_date'] );
 		$args['show_see_all'] = $this->to_bool( $args['show_see_all'] );
 
@@ -242,6 +244,43 @@ final class ADVTN_Renderer {
 			'iso'   => gmdate( 'c', $timestamp ),
 			'label' => $label,
 		);
+	}
+
+	/**
+	 * Favicon URL for an item's publisher.
+	 *
+	 * Derived from the stored host rather than fetched and cached during
+	 * ingest, because the icon a news API hands back is itself just a favicon
+	 * service URL built from the domain — deriving it costs nothing, needs no
+	 * schema change, and covers network sources too.
+	 *
+	 * The request is made by the visitor's browser, not the server, so the
+	 * plugin's no-HTTP-during-render rule still holds. It is a third party
+	 * seeing your visitors' IPs, though, which is why it is off by default;
+	 * filter `advtn_source_icon_url` to self-host or swap providers.
+	 *
+	 * @param array<string,mixed> $item Item row.
+	 * @return string URL, or '' when unavailable.
+	 */
+	public function source_icon( array $item ): string {
+		$host = (string) ( $item['host'] ?? '' );
+
+		if ( '' === $host ) {
+			return '';
+		}
+
+		$url = 'https://www.google.com/s2/favicons?sz=64&domain=' . rawurlencode( $host );
+
+		/**
+		 * Filters the favicon URL used beside a source name.
+		 *
+		 * Return '' to omit the icon for this item.
+		 *
+		 * @param string              $url  Icon URL.
+		 * @param string              $host Item host.
+		 * @param array<string,mixed> $item Item row.
+		 */
+		return (string) apply_filters( 'advtn_source_icon_url', $url, $host, $item );
 	}
 
 	/**
@@ -401,7 +440,8 @@ final class ADVTN_Renderer {
 			. ".{$p}--news .{$p}__link{display:block;font-size:1.02em;font-weight:600;line-height:1.35}"
 			. ".{$p}--news .{$p}__media{flex:0 0 auto;width:120px}"
 			. ".{$p}--news .{$p}__thumb{display:block;width:120px;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin:0}"
-			. "@media(max-width:480px){.{$p}--news .{$p}__media,.{$p}--news .{$p}__thumb{width:88px}}";
+			. "@media(max-width:480px){.{$p}--news .{$p}__media,.{$p}--news .{$p}__thumb{width:88px}}"
+			. ".{$p}__icon{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-align:-3px;flex:0 0 auto;margin:0}";
 
 		/**
 		 * Filters the inline widget stylesheet.

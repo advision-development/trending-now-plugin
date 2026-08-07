@@ -19,6 +19,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   so they reserve their space rather than shifting the layout as they load, everything
   below the first card is lazy-loaded, and the first is fetched eagerly because it is
   usually the one above the fold.
+- **Site icons** beside source names (`show_icons`, off by default). The URL is derived
+  from the stored host rather than fetched during ingest — a news API's own icon field is
+  itself just a favicon-service URL built from the domain, so deriving it needs no schema
+  change and covers network sources too. Loaded by the visitor's browser, lazily and at a
+  fixed 16px, so the render-time no-HTTP rule is unaffected; it does expose visitors to a
+  third-party favicon service, hence the default and the `advtn_source_icon_url` filter.
 - **Relative timestamps.** Under an hour reads `45m`, under a day `6h`, and anything
   older keeps its date. The `datetime` attribute stays a full ISO timestamp.
 - **Display settings.** Layout, thumbnails, source names and timestamps are now

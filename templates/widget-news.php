@@ -40,8 +40,16 @@ $p = $prefix;
 			?>
 			<li class="<?php echo esc_attr( $p ); ?>__item <?php echo esc_attr( $p ); ?>__item--<?php echo $is_news ? 'news' : 'network'; ?>">
 				<div class="<?php echo esc_attr( $p ); ?>__body">
-					<?php if ( $args['show_source'] || null !== $date ) : ?>
+					<?php if ( $args['show_source'] || null !== $date || $args['show_icons'] ) : ?>
 						<p class="<?php echo esc_attr( $p ); ?>__meta">
+							<?php
+							$advtn_icon = $args['show_icons'] ? $renderer->source_icon( $item ) : '';
+							if ( '' !== $advtn_icon ) :
+								?>
+								<img class="<?php echo esc_attr( $p ); ?>__icon" src="<?php echo esc_url( $advtn_icon ); ?>" alt="" width="16" height="16" loading="lazy" decoding="async" />
+								<?php
+							endif;
+							?>
 							<?php if ( $args['show_source'] && ! empty( $item['site_name'] ) ) : ?>
 								<span class="<?php echo esc_attr( $p ); ?>__source"><?php echo esc_html( (string) $item['site_name'] ); ?></span>
 							<?php endif; ?>
