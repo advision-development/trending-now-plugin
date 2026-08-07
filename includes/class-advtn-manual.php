@@ -386,6 +386,7 @@ final class ADVTN_Manual {
 		$this->retire_expired();
 		advtn()->selector()->build_and_commit();
 		advtn()->renderer()->purge_cache();
+		ADVTN_Page_Cache::purge();
 		$this->schedule_next_expiry();
 
 		ADVTN_Logger::log( 'info', 'Manual link expired; selection rebuilt.' );

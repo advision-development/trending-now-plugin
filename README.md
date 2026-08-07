@@ -468,6 +468,7 @@ crawled most often — that is where this earns its keep.
 | `serpapi_key` | — | Required by SerpAPI sources. See constants below |
 | `github_token` | — | Only needed if the plugin repo is private |
 | `auto_update` | `true` | Offer updates from GitHub releases |
+| `purge_page_cache` | `true` | Clear the host page cache when the list changes |
 | `delete_data_on_uninstall` | `false` | |
 
 `link_rel_external` applies **only** to news items (`serpapi`). Internal network
@@ -493,6 +494,7 @@ note so an empty box is not mistaken for an unset key.
 | `advtn_source_map` | filter | Register an additional source type |
 | `advtn_inline_css` | filter | Replace or suppress the generated stylesheet |
 | `advtn_source_icon_url` | filter | Change or suppress the publisher favicon URL |
+| `advtn_purge_page_cache` | action | Clear a page cache or CDN the plugin does not know |
 | `advtn_ingest_cycle` | action | Hourly due-check |
 | `advtn_ingest_source` | action | Ingest one source (`$source_id`) |
 | `advtn_finalize_cycle` | action | Prune, select, render, unlock |
@@ -601,6 +603,15 @@ or all items stale.
 **A source shows an error and stops being tried.** That is the backoff: `consec_fails`
 raises `backoff_until` by `source_fail_backoff × min(fails, 6)`. **Run ingest now**
 ignores backoff and retries immediately.
+
+**The widget and the archive show different sets.** Almost always a full-page cache
+holding two snapshots taken at different times — the homepage cached after an ingest
+cycle, the archive before it. The plugin purges WP Rocket, LiteSpeed, W3 Total Cache,
+WP Super Cache, WP Fastest Cache, Cachify, SG Optimizer, Nginx Helper, Comet Cache,
+Breeze and Autoptimize when the list changes; Diagnostics reports which it can see, and
+`advtn_purge_page_cache` covers anything else, including a CDN. Also worth checking: the
+archive lists **everything retained**, fifty per page, so a widget item can legitimately
+sit several pages in — the widget is a curated selection, not the first N of the archive.
 
 **A slow or failing source starves the others.** *Run ingest now* works to a
 `batch_time_budget` (20s by default) and queues whatever it cannot reach. One source

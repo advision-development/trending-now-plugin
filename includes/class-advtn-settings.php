@@ -70,6 +70,7 @@ final class ADVTN_Settings {
 			'serpapi_key'              => '',
 			'github_token'             => '',
 			'auto_update'              => true,
+			'purge_page_cache'         => true,
 			'delete_data_on_uninstall' => false,
 		);
 	}
@@ -261,7 +262,8 @@ final class ADVTN_Settings {
 		$hub_url          = trim( (string) ( $input['hub_url'] ?? '' ) );
 		$out['hub_url']   = '' !== $hub_url ? untrailingslashit( esc_url_raw( $hub_url ) ) : '';
 
-		$out['auto_update'] = ! empty( $input['auto_update'] );
+		$out['auto_update']      = ! empty( $input['auto_update'] );
+		$out['purge_page_cache'] = ! empty( $input['purge_page_cache'] );
 
 		// Credentials: printable, no whitespace. SerpAPI keys are hex; GitHub
 		// tokens carry underscores and are longer.

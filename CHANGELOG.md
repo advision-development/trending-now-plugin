@@ -9,6 +9,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Page cache purging.** The plugin busted its own render cache at the end of each cycle
+  but never told the host's full-page cache, so the cached HTML kept whatever it had
+  captured. On a live site this showed up as the widget and the archive disagreeing —
+  two snapshots taken nearly two hours apart, which reads as the plugin selecting
+  inconsistently. WP Rocket, LiteSpeed, W3 Total Cache, WP Super Cache, WP Fastest Cache,
+  Cachify, SG Optimizer, Nginx Helper, Comet Cache, Breeze and Autoptimize are purged when
+  the list changes; `advtn_purge_page_cache` covers anything else. Every integration is
+  guarded and failures are swallowed, since a cache that will not clear must not take down
+  an ingest cycle.
 - **`show_excerpt`** on the shortcode, the block and the display settings, available in
   all three layouts and on the archive. Off by default: plenty of sources return no
   excerpt at all, so switching it on globally would give a ragged mix of items with and

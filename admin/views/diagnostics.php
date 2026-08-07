@@ -84,6 +84,18 @@ $advtn_badge = static function ( bool $value ): string {
 				<?php endif; ?>
 			</td>
 		</tr>
+		<tr>
+			<th><?php esc_html_e( 'Page cache', 'trending-now' ); ?></th>
+			<td>
+				<?php
+				$advtn_caches = ADVTN_Page_Cache::detected();
+				echo esc_html( empty( $advtn_caches ) ? __( 'none detected', 'trending-now' ) : implode( ', ', $advtn_caches ) );
+				echo ' ';
+				echo wp_kses_post( $advtn_badge( $settings->get_bool( 'purge_page_cache' ) ) );
+				esc_html_e( ' purged on change', 'trending-now' );
+				?>
+			</td>
+		</tr>
 		<tr><th><?php esc_html_e( 'Versions', 'trending-now' ); ?></th><td><?php echo esc_html( sprintf( 'plugin %s / db %s', (string) $advtn_status['plugin_version'], (string) $advtn_status['db_version'] ) ); ?></td></tr>
 		<tr>
 			<th><?php esc_html_e( 'Latest release', 'trending-now' ); ?></th>

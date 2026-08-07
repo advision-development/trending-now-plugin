@@ -328,6 +328,27 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 			</td>
 		</tr>
 		<tr>
+			<th scope="row"><?php esc_html_e( 'Page cache', 'trending-now' ); ?></th>
+			<td>
+				<label><input type="checkbox" name="advtn[purge_page_cache]" value="1" <?php checked( ! empty( $advtn_s['purge_page_cache'] ) ); ?> /> <?php esc_html_e( 'Purge the page cache when the list changes', 'trending-now' ); ?></label>
+				<p class="description">
+					<?php
+					$advtn_caches = ADVTN_Page_Cache::detected();
+					echo esc_html(
+						empty( $advtn_caches )
+							? __( 'No supported page cache detected.', 'trending-now' )
+							: sprintf(
+								/* translators: %s: comma-separated cache plugin names. */
+								__( 'Detected: %s.', 'trending-now' ),
+								implode( ', ', $advtn_caches )
+							)
+					);
+					?>
+					<?php esc_html_e( 'Without this the widget and the archive can show different sets, because a page cache keeps whichever HTML it captured — one page cached after an ingest cycle and another before it will simply disagree. Hook advtn_purge_page_cache for a cache or CDN not listed.', 'trending-now' ); ?>
+				</p>
+			</td>
+		</tr>
+		<tr>
 			<th scope="row"><?php esc_html_e( 'Uninstall', 'trending-now' ); ?></th>
 			<td><label><input type="checkbox" name="advtn[delete_data_on_uninstall]" value="1" <?php checked( ! empty( $advtn_s['delete_data_on_uninstall'] ) ); ?> /> <?php esc_html_e( 'Drop the items table and every advtn_* option on uninstall', 'trending-now' ); ?></label></td>
 		</tr>

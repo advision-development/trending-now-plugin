@@ -309,6 +309,11 @@ final class ADVTN_Ingest {
 
 			advtn()->renderer()->purge_cache();
 
+			// A full-page cache holds the finished HTML and knows nothing about
+			// our render cache; without this the widget and the archive drift
+			// apart by however long the page cache lives.
+			ADVTN_Page_Cache::purge();
+
 			if ( 'hub' === $this->settings->get_string( 'mode' ) ) {
 				advtn()->rest()->rebuild_items_cache();
 			}

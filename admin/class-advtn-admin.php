@@ -191,7 +191,7 @@ final class ADVTN_Admin {
 		// An unchecked checkbox posts nothing, and update() merges over the
 		// current values — so absence has to be made explicit or a box can
 		// never be turned back off.
-		foreach ( array( 'archive_noindex', 'archive_enabled', 'link_target_blank', 'delete_data_on_uninstall', 'auto_update', 'show_images', 'show_source', 'show_date', 'show_icons', 'show_excerpt' ) as $flag ) {
+		foreach ( array( 'archive_noindex', 'archive_enabled', 'link_target_blank', 'delete_data_on_uninstall', 'auto_update', 'purge_page_cache', 'show_images', 'show_source', 'show_date', 'show_icons', 'show_excerpt' ) as $flag ) {
 			$raw[ $flag ] = ! empty( $raw[ $flag ] );
 		}
 
@@ -201,6 +201,7 @@ final class ADVTN_Admin {
 		$this->settings->update( (array) $raw );
 
 		advtn()->renderer()->purge_cache();
+		ADVTN_Page_Cache::purge();
 
 		$this->redirect( 'settings', 'saved' );
 	}
@@ -286,6 +287,7 @@ final class ADVTN_Admin {
 		// result immediately rather than at the next cycle.
 		advtn()->selector()->build_and_commit();
 		advtn()->renderer()->purge_cache();
+		ADVTN_Page_Cache::purge();
 
 		$active = count( advtn()->manual()->active() );
 
@@ -565,11 +567,26 @@ final class ADVTN_Admin {
 			case 'rebuild_selection':
 				advtn()->selector()->build_and_commit();
 				advtn()->renderer()->purge_cache();
+				ADVTN_Page_Cache::purge();
 				$notice = 'selection_rebuilt';
 				break;
 
 			case 'purge_cache':
 				advtn()->renderer()->purge_cache();
+				$purged = ADVTN_Page_Cache::purge();
+
+				if ( ! empty( $purged ) ) {
+					set_transient(
+						'advtn_admin_summary',
+						sprintf(
+							/* translators: %s: comma-separated cache plugin names. */
+							__( 'Also purged the page cache: %s.', 'trending-now' ),
+							implode( ', ', $purged )
+						),
+						60
+					);
+				}
+
 				$notice = 'cache_purged';
 				break;
 
