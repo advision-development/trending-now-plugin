@@ -3,7 +3,7 @@
  * Plugin Name:       Trending Now
  * Plugin URI:        https://github.com/advision-development/trending-now-plugin
  * Description:       Server-rendered "Trending Now" link block aggregated from owned WordPress sites and Google News, plus a paginated archive. Built for crawl discovery.
- * Version:           1.0.0
+ * Version:           1.1.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Advision Development
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'ADVTN_VERSION', '1.0.0' );
+define( 'ADVTN_VERSION', '1.1.0' );
 define( 'ADVTN_DB_VERSION', '2' );
 define( 'ADVTN_FILE', __FILE__ );
 define( 'ADVTN_PATH', plugin_dir_path( __FILE__ ) );

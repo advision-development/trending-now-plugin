@@ -5,7 +5,11 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.1.0] — 2026-08-07
+
+> **Upgrading from 1.0.0 requires one manual install.** The update mechanism ships *in*
+> this release, so a 1.0.0 site has no way to discover it — upload the zip or pull once,
+> and every later release arrives on the Plugins screen by itself.
 
 ### Added
 
@@ -188,4 +192,5 @@ Found by running the plugin against real WordPress rather than by inspection.
 - GDELT's malformed-JSON branch is covered by code inspection only — a malformed
   response could not be forced on demand.
 
+[1.1.0]: https://github.com/advision-development/trending-now-plugin/releases/tag/v1.1.0
 [1.0.0]: https://github.com/advision-development/trending-now-plugin/releases/tag/v1.0.0
