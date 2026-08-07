@@ -404,6 +404,25 @@ final class ADVTN_Renderer {
 	}
 
 	/**
+	 * The inline stylesheet, but only the first time it is asked for.
+	 *
+	 * The widget normally emits it through emit(); the archive renders its own
+	 * markup and so has to ask, and must not duplicate it when a widget is also
+	 * on the page.
+	 *
+	 * @return string
+	 */
+	public function inline_css_once(): string {
+		if ( self::$css_emitted ) {
+			return '';
+		}
+
+		self::$css_emitted = true;
+
+		return $this->css();
+	}
+
+	/**
 	 * Inline stylesheet, generated from the configured class prefix.
 	 *
 	 * Inlined rather than enqueued because the prefix is per-site and because
@@ -431,9 +450,13 @@ final class ADVTN_Renderer {
 			// Google News / MSN feed. Colours inherit from the theme, with
 			// currentColor tints so it sits correctly on light and dark.
 			. ".{$p}--news .{$p}__items{gap:0}"
-			. ".{$p}--news .{$p}__item{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.9rem 0;border-bottom:1px solid rgba(128,128,128,.25)}"
+			. ".{$p}--news .{$p}__item{display:flex;flex-wrap:nowrap;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.9rem 0;border-bottom:1px solid rgba(128,128,128,.25)}"
 			. ".{$p}--news .{$p}__item:last-child{border-bottom:0}"
-			. ".{$p}--news .{$p}__body{flex:1 1 auto;min-width:0}"
+			// flex:1 means basis 0, so a long headline cannot claim the whole
+			// line and shove the thumbnail onto the next one. The base __item
+			// rule sets flex-wrap:wrap for the list layout, which is why the
+			// nowrap reset above matters too.
+			. ".{$p}--news .{$p}__body{flex:1;min-width:0}"
 			. ".{$p}--news .{$p}__meta{display:flex;align-items:center;gap:.4rem;margin:0 0 .25rem;font-size:.78em;opacity:.7;line-height:1.2}"
 			. ".{$p}--news .{$p}__source{font-weight:600}"
 			. ".{$p}--news .{$p}__source+.{$p}__date::before{content:'·';margin-right:.4rem;opacity:.7}"
@@ -441,7 +464,14 @@ final class ADVTN_Renderer {
 			. ".{$p}--news .{$p}__media{flex:0 0 auto;width:120px}"
 			. ".{$p}--news .{$p}__thumb{display:block;width:120px;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin:0}"
 			. "@media(max-width:480px){.{$p}--news .{$p}__media,.{$p}--news .{$p}__thumb{width:88px}}"
-			. ".{$p}__icon{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-align:-3px;flex:0 0 auto;margin:0}";
+			. ".{$p}__icon{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-align:-3px;flex:0 0 auto;margin:0}"
+			. ".{$p}-archive{max-width:820px;margin:0 auto;padding:0 1rem}"
+			. ".{$p}-archive__header{margin:0 0 1.5rem}"
+			. ".{$p}-archive__intro{opacity:.85}"
+			. ".{$p}-archive__meta{font-size:.85em;opacity:.7}"
+			. ".{$p}-archive__nav{display:flex;justify-content:center;gap:.4rem;margin:2rem 0;flex-wrap:wrap}"
+			. ".{$p}-archive__nav .page-numbers{padding:.35rem .7rem;border:1px solid rgba(128,128,128,.35);border-radius:6px;text-decoration:none}"
+			. ".{$p}-archive__nav .page-numbers.current{font-weight:700;border-color:currentColor}";
 
 		/**
 		 * Filters the inline widget stylesheet.

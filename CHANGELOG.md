@@ -9,6 +9,13 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The news layout put the thumbnail below the headline instead of beside it.** The base
+  `__item` rule sets `flex-wrap: wrap` for the list layout, and the news rule never reset
+  it — so with `flex-basis: auto` a long headline claimed the whole line and pushed the
+  image onto the next one. The body is now `flex: 1` (basis 0) and the row explicitly
+  `flex-wrap: nowrap`.
+- **The archive looked nothing like the widget.** It now uses the same card markup,
+  classes and display settings, rather than its own unstyled list.
 - **The newest articles were rendered last.** The final list was sorted by selection tier
   before publication date, so anything already shown (tier 1, held by the exposure floor)
   outranked anything brand new (tier 2) — on a 12-slot widget the two freshest stories sat

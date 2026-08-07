@@ -227,7 +227,11 @@ return `''` and enqueue your own stylesheet.
 ## The archive
 
 A paginated "see all" page at `/trending/` (slug configurable), listing the full retained
-set — active and stale — newest first.
+set — active and stale — newest first. It renders with the **same card markup and classes
+as the widget's news layout**, so the two match without a second stylesheet to keep in
+step, and it honours the same display settings for thumbnails, icons, source names and
+timestamps. Only the first thumbnail is eager; the rest lazy-load, which matters more here
+than in the widget since a page holds fifty of them.
 
 - Proper `<title>`, canonical, `og:` tags and `rel="prev"` / `rel="next"`.
 - Out-of-range pages redirect rather than 404.
