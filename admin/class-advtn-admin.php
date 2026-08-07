@@ -58,6 +58,7 @@ final class ADVTN_Admin {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_action( 'admin_post_advtn_save_settings', array( $this, 'handle_save_settings' ) );
 		add_action( 'admin_post_advtn_save_sources', array( $this, 'handle_save_sources' ) );
+		add_action( 'admin_post_advtn_save_manual', array( $this, 'handle_save_manual' ) );
 		add_action( 'admin_post_advtn_action', array( $this, 'handle_action' ) );
 		add_action( 'admin_post_advtn_export_sources', array( $this, 'handle_export_sources' ) );
 		add_action( 'admin_post_advtn_import_sources', array( $this, 'handle_import_sources' ) );
@@ -123,7 +124,7 @@ final class ADVTN_Admin {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only tab switch.
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'settings';
 
-		return in_array( $tab, array( 'settings', 'sources', 'diagnostics' ), true ) ? $tab : 'settings';
+		return in_array( $tab, array( 'settings', 'sources', 'manual', 'diagnostics' ), true ) ? $tab : 'settings';
 	}
 
 	/**
@@ -144,6 +145,7 @@ final class ADVTN_Admin {
 		$tabs = array(
 			'settings'    => __( 'Settings', 'trending-now' ),
 			'sources'     => __( 'Sources', 'trending-now' ),
+			'manual'      => __( 'Manual links', 'trending-now' ),
 			'diagnostics' => __( 'Diagnostics', 'trending-now' ),
 		);
 
@@ -269,6 +271,45 @@ final class ADVTN_Admin {
 		}
 
 		$this->redirect( 'sources', 'saved' );
+	}
+
+	/**
+	 * Persist the curated links form.
+	 *
+	 * @return void
+	 */
+	public function handle_save_manual(): void {
+		$this->guard( 'advtn_save_manual' );
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
+		$rows = isset( $_POST['links'] ) && is_array( $_POST['links'] ) ? (array) wp_unslash( $_POST['links'] ) : array();
+
+		$result = advtn()->manual()->save( $rows );
+
+		// Curated links are placed by hand, so the operator should see the
+		// result immediately rather than at the next cycle.
+		advtn()->selector()->build_and_commit();
+		advtn()->renderer()->purge_cache();
+
+		$active = count( advtn()->manual()->active() );
+
+		set_transient(
+			'advtn_admin_summary',
+			sprintf(
+				/* translators: 1: saved count, 2: live count. */
+				__( 'Saved %1$d link(s); %2$d live in the widget now.', 'trending-now' ),
+				count( $result['links'] ),
+				$active
+			),
+			60
+		);
+
+		if ( ! empty( $result['errors'] ) ) {
+			set_transient( 'advtn_admin_errors', $result['errors'], 60 );
+			$this->redirect( 'manual', 'partial' );
+		}
+
+		$this->redirect( 'manual', 'saved' );
 	}
 
 	/**

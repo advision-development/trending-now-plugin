@@ -196,6 +196,80 @@ advtn_assert_same( true, ADVTN_Source_Base::is_news_type( 'serpapi' ), 'news typ
 advtn_assert_same( false, ADVTN_Source_Base::is_news_type( 'wp_rest' ), 'news types: wp_rest is network' );
 advtn_assert_same( false, ADVTN_Source_Base::is_news_type( 'rss' ), 'news types: rss is network' );
 
+/* -------------------------------------------------------------------------
+ * Curated link placement
+ *
+ * Position handling is pure list surgery, so it is worth pinning without a
+ * database: 1-based, clamped, and 0 meaning "no opinion".
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Mirror of ADVTN_Selector::place_manual() for the pure ordering rules.
+ *
+ * @param array<int,string>    $auto   Automatic titles in order.
+ * @param array<int,array{0:string,1:int}> $manual Title and position pairs.
+ * @param int                  $limit  Widget limit.
+ * @return array<int,string>
+ */
+function advtn_place( array $auto, array $manual, int $limit ): array {
+	$out = array();
+
+	foreach ( $manual as $entry ) {
+		if ( 0 === $entry[1] ) {
+			$out[] = $entry[0];
+		}
+	}
+
+	$out = array_merge( $out, $auto );
+
+	foreach ( $manual as $entry ) {
+		if ( $entry[1] < 1 ) {
+			continue;
+		}
+		array_splice( $out, min( $entry[1] - 1, count( $out ) ), 0, array( $entry[0] ) );
+	}
+
+	return array_slice( $out, 0, $limit );
+}
+
+$advtn_auto = array( 'a', 'b', 'c', 'd', 'e' );
+
+advtn_assert_same(
+	array( 'M', 'a', 'b', 'c', 'd' ),
+	advtn_place( $advtn_auto, array( array( 'M', 1 ) ), 5 ),
+	'placement: position 1 goes first'
+);
+
+advtn_assert_same(
+	array( 'a', 'b', 'M', 'c', 'd' ),
+	advtn_place( $advtn_auto, array( array( 'M', 3 ) ), 5 ),
+	'placement: position 3 lands third'
+);
+
+advtn_assert_same(
+	array( 'M1', 'a', 'M3', 'b', 'c' ),
+	advtn_place( $advtn_auto, array( array( 'M1', 1 ), array( 'M3', 3 ) ), 5 ),
+	'placement: two positions hold simultaneously'
+);
+
+advtn_assert_same(
+	array( 'M', 'a', 'b', 'c', 'd' ),
+	advtn_place( $advtn_auto, array( array( 'M', 0 ) ), 5 ),
+	'placement: position 0 joins the front of the automatic run'
+);
+
+advtn_assert_same(
+	'M',
+	advtn_place( $advtn_auto, array( array( 'M', 99 ) ), 6 )[5],
+	'placement: an out-of-range slot clamps to the end rather than dropping'
+);
+
+advtn_assert_same(
+	3,
+	count( advtn_place( $advtn_auto, array( array( 'M', 1 ) ), 3 ) ),
+	'placement: never exceeds the widget limit'
+);
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );

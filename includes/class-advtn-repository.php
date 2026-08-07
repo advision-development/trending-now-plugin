@@ -337,6 +337,100 @@ final class ADVTN_Repository {
 	}
 
 	/**
+	 * Fetch rows by url_hash.
+	 *
+	 * @param string[] $hashes url_hash values.
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function get_by_hashes( array $hashes ): array {
+		global $wpdb;
+
+		$hashes = array_values( array_unique( array_filter( array_map( 'strval', $hashes ) ) ) );
+
+		if ( empty( $hashes ) ) {
+			return array();
+		}
+
+		$table        = $this->table();
+		$placeholders = implode( ',', array_fill( 0, count( $hashes ), '%s' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT id, url_hash, url, title, excerpt, image_url, published_at, site_name, host, source_id, source_type, times_shown, first_shown_at, status
+				 FROM {$table} WHERE url_hash IN ({$placeholders})",
+				$hashes
+			),
+			ARRAY_A
+		);
+
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * Set the status of rows owned by a source, matched on url_hash.
+	 *
+	 * @param string[] $hashes    url_hash values.
+	 * @param string   $status    'active' or 'stale'.
+	 * @param string   $source_id Owning source id.
+	 * @return int Rows changed.
+	 */
+	public function set_status_by_hashes( array $hashes, string $status, string $source_id ): int {
+		global $wpdb;
+
+		$hashes = array_values( array_unique( array_filter( array_map( 'strval', $hashes ) ) ) );
+
+		if ( empty( $hashes ) || ! in_array( $status, array( 'active', 'stale' ), true ) ) {
+			return 0;
+		}
+
+		$table        = $this->table();
+		$placeholders = implode( ',', array_fill( 0, count( $hashes ), '%s' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+		return (int) $wpdb->query(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"UPDATE {$table} SET status = %s WHERE source_id = %s AND url_hash IN ({$placeholders})",
+				array_merge( array( $status, $source_id ), $hashes )
+			)
+		);
+	}
+
+	/**
+	 * Delete rows owned by a given source, matched on url_hash.
+	 *
+	 * Scoped to the source so an identical URL that also arrived from a real
+	 * feed is left alone.
+	 *
+	 * @param string[] $hashes    url_hash values.
+	 * @param string   $source_id Owning source id.
+	 * @return int Rows deleted.
+	 */
+	public function delete_manual_by_hashes( array $hashes, string $source_id ): int {
+		global $wpdb;
+
+		$hashes = array_values( array_unique( array_filter( array_map( 'strval', $hashes ) ) ) );
+
+		if ( empty( $hashes ) ) {
+			return 0;
+		}
+
+		$table        = $this->table();
+		$placeholders = implode( ',', array_fill( 0, count( $hashes ), '%s' ) );
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+		return (int) $wpdb->query(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"DELETE FROM {$table} WHERE source_id = %s AND url_hash IN ({$placeholders})",
+				array_merge( array( $source_id ), $hashes )
+			)
+		);
+	}
+
+	/**
 	 * Selection candidates for one tier and pool.
 	 *
 	 * @param string $tier                One of 'pinned', 'unseen', 'least_shown'.

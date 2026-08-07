@@ -68,6 +68,7 @@ final class ADVTN_Plugin {
 
 		$this->scheduler()->register_hooks();
 		$this->updater()->register_hooks();
+		$this->manual()->register_hooks();
 		$this->archive()->register_hooks();
 		$this->shortcode()->register_hooks();
 		$this->block()->register_hooks();
@@ -195,6 +196,15 @@ final class ADVTN_Plugin {
 	}
 
 	/**
+	 * Curated links service.
+	 *
+	 * @return ADVTN_Manual
+	 */
+	public function manual(): ADVTN_Manual {
+		return $this->service( 'manual', fn() => new ADVTN_Manual( $this->settings(), $this->repository() ) );
+	}
+
+	/**
 	 * GitHub release updater.
 	 *
 	 * @return ADVTN_Updater
@@ -223,6 +233,7 @@ final class ADVTN_Plugin {
 			'wp_rest' => 'ADVTN_Source_WP_REST',
 			'rss'     => 'ADVTN_Source_RSS',
 			'serpapi' => 'ADVTN_Source_SerpAPI',
+			'manual'  => 'ADVTN_Source_Manual',
 			'hub'     => 'ADVTN_Source_Hub',
 		);
 

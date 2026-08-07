@@ -122,10 +122,11 @@ abstract class ADVTN_Source_Base implements ADVTN_Source_Interface {
 	 * Rejection rules (spec §5.1): invalid or non-http(s) URL, empty title
 	 * after sanitization, or an item pointing at this site's own host.
 	 *
-	 * @param array<string,mixed> $raw Partially mapped item.
+	 * @param array<string,mixed> $raw               Partially mapped item.
+	 * @param bool                $allow_local_host  Permit links back to this site.
 	 * @return array<string,mixed>|null
 	 */
-	protected function make_item( array $raw ): ?array {
+	protected function make_item( array $raw, bool $allow_local_host = false ): ?array {
 		$url = trim( (string) ( $raw['url'] ?? '' ) );
 
 		if ( ! ADVTN_URL::is_valid( $url ) ) {
@@ -133,7 +134,11 @@ abstract class ADVTN_Source_Base implements ADVTN_Source_Interface {
 		}
 
 		$host = ADVTN_URL::host( $url );
-		if ( '' === $host || $host === ADVTN_URL::local_host() ) {
+		if ( '' === $host ) {
+			return null;
+		}
+
+		if ( ! $allow_local_host && $host === ADVTN_URL::local_host() ) {
 			return null;
 		}
 

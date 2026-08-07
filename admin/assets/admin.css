@@ -246,3 +246,22 @@
 	gap: .75em;
 	align-items: center;
 }
+
+/* Curated links */
+
+.advtn-manual.is-expired {
+	opacity: .65;
+	border-color: #d63638;
+}
+
+.advtn-req {
+	color: #b32d2e;
+	font-style: normal;
+}
+
+.advtn-expiry__presets {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .3em;
+	margin: .3em 0;
+}

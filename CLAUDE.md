@@ -68,7 +68,8 @@ includes/
   class-advtn-rest.php        /ingest, /items, /status
   class-advtn-hmac.php        sign + verify
   sources/                    one class per source type behind ADVTN_Source_Interface
-admin/                        menu, three tab views, AJAX test-fetch
+  class-advtn-manual.php      curated links: option CRUD, expiry, table sync
+admin/                        menu, four tab views, AJAX test-fetch
 templates/                    widget-list, widget-cards, archive (theme-overridable)
 blocks/trending-now/          block.json + build-free editor script
 ```
@@ -169,6 +170,11 @@ the removal keep their news classification.
   WordPress derives from the `Update URI` header. Removing that header hands the slug
   back to wordpress.org. The GitHub token is only ever sent to `api.github.com` — the
   release CDN redirect rejects it, and sending it further would leak it.
+- Curated links live in the `advtn_manual_links` option but are also written into the
+  items table through `ADVTN_Source_Manual`, so they dedupe, archive and count like
+  anything else. Expiry sets the row to `stale` rather than deleting it — leaving it
+  `active` would merely stop it being *placed* while it carried on competing as an
+  ordinary candidate, which looks exactly like the timer not working.
 - Nothing an ingest writes is visible until `finalize()` runs: it is what commits the
   selection and busts the render cache. When debugging "my items are not showing", check
   `advtn_last_ingest` and the lock before suspecting the fetch.

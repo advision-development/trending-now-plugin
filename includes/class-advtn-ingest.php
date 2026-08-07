@@ -368,11 +368,17 @@ final class ADVTN_Ingest {
 	 * @return array<int,array<string,mixed>>
 	 */
 	public function cycle_sources(): array {
-		if ( 'spoke' === $this->settings->get_string( 'mode' ) ) {
-			return array( ADVTN_Source_Hub::virtual_config( $this->settings ) );
+		$sources = 'spoke' === $this->settings->get_string( 'mode' )
+			? array( ADVTN_Source_Hub::virtual_config( $this->settings ) )
+			: $this->settings->enabled_sources();
+
+		// Curated links are refreshed alongside real sources so last_seen keeps
+		// moving and the stale sweep leaves them alone. Cheap: no HTTP.
+		if ( ! empty( advtn()->manual()->active() ) ) {
+			array_unshift( $sources, ADVTN_Source_Manual::virtual_config() );
 		}
 
-		return $this->settings->enabled_sources();
+		return $sources;
 	}
 
 	/**
@@ -384,6 +390,10 @@ final class ADVTN_Ingest {
 	private function source_config( string $source_id ): ?array {
 		if ( ADVTN_Source_Hub::SOURCE_ID === $source_id ) {
 			return ADVTN_Source_Hub::virtual_config( $this->settings );
+		}
+
+		if ( ADVTN_Manual::SOURCE_ID === $source_id ) {
+			return ADVTN_Source_Manual::virtual_config();
 		}
 
 		return $this->settings->source( $source_id );

@@ -21,6 +21,7 @@ higher-authority properties.
 - [Install](#install)
 - [Quick start](#quick-start)
 - [Sources](#sources)
+- [Manual links](#manual-links)
 - [Displaying the widget](#displaying-the-widget)
 - [The archive](#the-archive)
 - [How selection works](#how-selection-works)
@@ -120,6 +121,32 @@ A GDELT provider shipped in 1.0.0 and was removed: free, but 10–20s per reques
 limit of roughly one request per five seconds whose penalty outlasts its own window. Any
 `gdelt` source rows are dropped automatically on upgrade; items already ingested from it
 are kept, still counted as news, and age out normally.
+
+## Manual links
+
+**Trending Now → Manual links** is a hand-curated list that mixes into the same widget as
+ingested links. Each entry takes the same fields an ingested item has — URL, title,
+excerpt, image, source name, publish date — plus two of its own:
+
+- **Position** — the slot it should occupy, 1-based. `0` means "include it, but let it
+  fall where it may". Out-of-range positions clamp to the end rather than dropping the
+  link.
+- **Expires** — a UTC timestamp, with `+1 day` / `+3 days` / `+1 week` / `+30 days`
+  shortcuts, or empty for indefinite. The row shows the time remaining at a glance.
+
+Curated links are stored in the items table like everything else, so they deduplicate
+against anything a source also finds, appear in the archive, and carry the same display
+counters. They reserve their slots before the tiers run, so a widget limit of 30 with
+three curated links leaves 27 for automatic selection.
+
+Two deliberate differences from ingested sources:
+
+- **Links back to this site are allowed.** The self-link rule exists to catch a source
+  echoing your own content; choosing one by hand is a different thing.
+- **Expiry marks the row stale rather than deleting it** — off the widget, kept in the
+  archive. When a timer runs out the list is rebuilt immediately via a scheduled action,
+  rather than waiting for the next ingest cycle, which on the default interval could be
+  20 hours away.
 
 ## Displaying the widget
 

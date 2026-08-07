@@ -97,6 +97,21 @@ final class ADVTN_Scheduler {
 	}
 
 	/**
+	 * Remove pending actions for one hook.
+	 *
+	 * @param string $hook Hook name.
+	 * @return void
+	 */
+	public function unschedule( string $hook ): void {
+		if ( function_exists( 'as_unschedule_all_actions' ) ) {
+			as_unschedule_all_actions( $hook, array(), self::GROUP );
+			as_unschedule_all_actions( $hook );
+		}
+
+		wp_clear_scheduled_hook( $hook );
+	}
+
+	/**
 	 * Remove every scheduled action this plugin owns.
 	 *
 	 * @return void
@@ -109,7 +124,7 @@ final class ADVTN_Scheduler {
 			as_unschedule_all_actions( self::HOOK_FINALIZE );
 		}
 
-		foreach ( array( self::HOOK_CYCLE, self::HOOK_SOURCE, self::HOOK_FINALIZE ) as $hook ) {
+		foreach ( array( self::HOOK_CYCLE, self::HOOK_SOURCE, self::HOOK_FINALIZE, ADVTN_Manual::HOOK ) as $hook ) {
 			wp_clear_scheduled_hook( $hook );
 		}
 	}

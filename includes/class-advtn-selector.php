@@ -61,18 +61,28 @@ final class ADVTN_Selector {
 		$limit = $this->settings->get_int( 'widget_limit', 1, 200 );
 		$floor = $this->settings->get_int( 'exposure_floor_days', 0, 30 );
 
-		$news_slots    = (int) floor( $limit * $this->settings->get_int( 'news_share_pct', 0, 50 ) / 100 );
-		$network_slots = $limit - $news_slots;
+		// Curated links are editorial decisions, so they are placed rather than
+		// competing: they reserve their slots before the tiers run, and are
+		// excluded from the candidate pool so they cannot also be picked.
+		$manual    = $this->manual_rows();
+		$auto_slots = max( 0, $limit - count( $manual ) );
+
+		$news_slots    = (int) floor( $auto_slots * $this->settings->get_int( 'news_share_pct', 0, 50 ) / 100 );
+		$network_slots = $auto_slots - $news_slots;
 		$cap           = max( 1, (int) ceil( $limit * $this->settings->get_int( 'max_source_share_pct', 5, 100 ) / 100 ) );
 
 		$selected      = array();
 		$source_counts = array();
 
+		foreach ( $manual as $row ) {
+			$selected[ (int) $row['id'] ] = $row;
+		}
+
 		$this->fill( 'network', $network_slots, $selected, $source_counts, $cap, $floor );
 		$this->fill( 'news', $news_slots, $selected, $source_counts, $cap, $floor );
 
 		// Reallocate whatever either category left on the table.
-		$remaining = $limit - count( $selected );
+		$remaining = $auto_slots - ( count( $selected ) - count( $manual ) );
 		if ( $remaining > 0 ) {
 			$this->fill( 'any', $remaining, $selected, $source_counts, $cap, $floor );
 		}
@@ -82,7 +92,7 @@ final class ADVTN_Selector {
 		// only a few configured — or when pinned items have already eaten a
 		// source's quota — enforcing it would leave slots empty while usable
 		// items sit unselected. Diversity is preferred, not mandatory.
-		$remaining = $limit - count( $selected );
+		$remaining = $auto_slots - ( count( $selected ) - count( $manual ) );
 		if ( $remaining > 0 ) {
 			$relaxed = $this->fill( 'any', $remaining, $selected, $source_counts, PHP_INT_MAX, $floor );
 
@@ -98,7 +108,15 @@ final class ADVTN_Selector {
 			}
 		}
 
-		$rows = array_values( $selected );
+		// Placement happens after ordering, so pull them back out first.
+		$manual_ids = array();
+		foreach ( $manual as $row ) {
+			$manual_ids[ (int) $row['id'] ] = true;
+		}
+
+		$rows = array_values(
+			array_filter( $selected, static fn( $row ) => ! isset( $manual_ids[ (int) $row['id'] ] ) )
+		);
 
 		usort(
 			$rows,
@@ -117,7 +135,76 @@ final class ADVTN_Selector {
 			}
 		);
 
-		return $this->space_hosts( $rows );
+		return $this->place_manual( $this->space_hosts( $rows ), $manual, $limit );
+	}
+
+	/**
+	 * Curated rows that exist in the table, newest editorial first.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function manual_rows(): array {
+		$rows = advtn()->manual()->selection_rows();
+
+		// A position of 0 means "no opinion"; those are appended rather than
+		// spliced, so sorting them last keeps the splice indexes meaningful.
+		usort(
+			$rows,
+			static function ( array $a, array $b ): int {
+				$pa = (int) ( $a['_position'] ?? 0 );
+				$pb = (int) ( $b['_position'] ?? 0 );
+
+				if ( 0 === $pa || 0 === $pb ) {
+					return ( 0 === $pa ? 1 : 0 ) <=> ( 0 === $pb ? 1 : 0 );
+				}
+
+				return $pa <=> $pb;
+			}
+		);
+
+		return $rows;
+	}
+
+	/**
+	 * Splice curated links into their configured slots.
+	 *
+	 * Positions are 1-based and clamped: asking for slot 40 in a 30-slot widget
+	 * puts the link last rather than dropping it.
+	 *
+	 * @param array<int,array<string,mixed>> $rows   Ordered automatic rows.
+	 * @param array<int,array<string,mixed>> $manual Curated rows.
+	 * @param int                            $limit  Widget limit.
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function place_manual( array $rows, array $manual, int $limit ): array {
+		if ( empty( $manual ) ) {
+			return array_slice( $rows, 0, $limit );
+		}
+
+		$unpositioned = array();
+
+		foreach ( $manual as $row ) {
+			if ( 0 === (int) ( $row['_position'] ?? 0 ) ) {
+				$unpositioned[] = $row;
+			}
+		}
+
+		// No stated position means "just include it", so it joins the front of
+		// the automatic run and takes its chances on ordering.
+		$out = array_merge( $unpositioned, $rows );
+
+		foreach ( $manual as $row ) {
+			$position = (int) ( $row['_position'] ?? 0 );
+
+			if ( $position < 1 ) {
+				continue;
+			}
+
+			$index = min( $position - 1, count( $out ) );
+			array_splice( $out, $index, 0, array( $row ) );
+		}
+
+		return array_slice( $out, 0, $limit );
 	}
 
 	/**

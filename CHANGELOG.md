@@ -9,6 +9,17 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Manual links.** A new admin tab holding a hand-curated list that mixes into the same
+  widget as ingested links, with the same item fields plus a **position** (1-based slot,
+  `0` for no preference, out-of-range clamped) and an **expiry** with quick presets and a
+  live time-remaining readout. Curated links are stored in the items table through a
+  synthetic source, so they deduplicate against anything a source also finds, appear in
+  the archive, and keep the same display counters; they reserve their slots before the
+  tiers run. Links back to the local site are permitted here — the self-link rule exists
+  to catch a source echoing your own content, which is not the same as choosing one by
+  hand. Expiry marks the row `stale` rather than deleting it, and schedules an immediate
+  rebuild so a timer does not wait up to a full ingest interval to take effect.
+
 - **Google News source via SerpAPI** (`serpapi`), alongside the existing GDELT provider:
   query, optional domain allowlist, country and language, with the key held once rather
   than per source. Grouped topic results are flattened, and the publisher name comes from

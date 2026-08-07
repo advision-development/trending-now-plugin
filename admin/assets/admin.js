@@ -273,6 +273,50 @@
 			} );
 		} );
 
+		// Curated links: repeat rows and expiry shortcuts.
+		var linkList = document.getElementById( 'advtn-manual-links' );
+		var linkTemplate = document.getElementById( 'advtn-manual-template' );
+		var addLink = document.getElementById( 'advtn-add-link' );
+
+		if ( linkList && linkTemplate && addLink ) {
+			addLink.addEventListener( 'click', function () {
+				var index = linkList.children.length;
+				var holder = document.createElement( 'div' );
+
+				holder.innerHTML = linkTemplate.innerHTML.replace( /links\[9999\]/g, 'links[' + index + ']' );
+
+				var row = holder.querySelector( '.advtn-manual' );
+				linkList.appendChild( row );
+				row.scrollIntoView( { behavior: 'smooth', block: 'center' } );
+			} );
+		}
+
+		document.addEventListener( 'click', function ( event ) {
+			var setBtn = event.target.closest( '.advtn-expiry-set' );
+			var clearBtn = event.target.closest( '.advtn-expiry-clear' );
+
+			if ( ! setBtn && ! clearBtn ) {
+				return;
+			}
+
+			event.preventDefault();
+
+			var field = ( setBtn || clearBtn ).closest( '.advtn-expiry' ).querySelector( '.advtn-expires' );
+			if ( ! field ) {
+				return;
+			}
+
+			if ( clearBtn ) {
+				field.value = '';
+				return;
+			}
+
+			// The field is UTC, so build the value from UTC parts rather than
+			// letting toISOString shift it by the browser's offset twice.
+			var when = new Date( Date.now() + parseInt( setBtn.dataset.hours, 10 ) * 3600 * 1000 );
+			field.value = when.toISOString().slice( 0, 16 );
+		} );
+
 		// Only confirm the destructive import strategy, not every import.
 		var importForm = document.querySelector( '.advtn-portability__import' );
 		if ( importForm ) {
