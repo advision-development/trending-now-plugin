@@ -119,14 +119,17 @@ final class ADVTN_Selector {
 			array_filter( $selected, static fn( $row ) => ! isset( $manual_ids[ (int) $row['id'] ] ) )
 		);
 
+		// Newest first, and deliberately NOT by tier. The tiers decide which
+		// items make the cut — that is how the exposure floor guarantees a URL
+		// stays in the list — but ordering by them too would push a
+		// just-published article below yesterday's, because anything already
+		// shown sits in tier 1 and anything brand new in tier 2. A feed whose
+		// freshest story is at the bottom reads as broken, and the crawl
+		// benefit is identical either way: the link is on the page regardless
+		// of which row it occupies.
 		usort(
 			$rows,
 			static function ( array $a, array $b ): int {
-				$tier = ( $a['_tier'] ?? 9 ) <=> ( $b['_tier'] ?? 9 );
-				if ( 0 !== $tier ) {
-					return $tier;
-				}
-
 				$date = strcmp( (string) ( $b['published_at'] ?? '' ), (string) ( $a['published_at'] ?? '' ) );
 				if ( 0 !== $date ) {
 					return $date;

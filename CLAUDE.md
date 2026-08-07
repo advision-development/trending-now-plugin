@@ -158,6 +158,9 @@ the removal keep their news classification.
   body will not be caught — redact explicitly, as the SerpAPI provider does.
 - Selection is deterministic. There is no score column and no relevance model; if you
   find yourself adding one, re-read spec §7.
+- Tiers govern *which* items are selected, never the order they are shown in. The final
+  list is sorted by `published_at DESC`. Sorting by tier first buries brand-new items
+  below already-shown ones, because unseen items are tier 2 and pinned ones tier 1.
 - The per-source cap is a *preference*, not a hard limit. `ADVTN_Selector::build()` makes
   a final pass with the cap lifted, because spec §7.1 also says never render fewer items
   than are available — with only a few sources configured, or when pinned items have

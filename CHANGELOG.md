@@ -7,6 +7,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **The newest articles were rendered last.** The final list was sorted by selection tier
+  before publication date, so anything already shown (tier 1, held by the exposure floor)
+  outranked anything brand new (tier 2) — on a 12-slot widget the two freshest stories sat
+  at positions 11 and 12, below items a day older. Tiers decide which items are selected;
+  they no longer decide the order they appear in, which is now simply newest first.
+  Curated links still hold their configured slots.
+
 ### Added
 
 - **Maximum age cutoff** (`max_age_hours`). Hides anything published longer ago than the
