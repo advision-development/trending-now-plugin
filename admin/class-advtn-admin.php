@@ -195,14 +195,10 @@ final class ADVTN_Admin {
 			$raw[ $flag ] = ! empty( $raw[ $flag ] );
 		}
 
-		$before = $this->settings->all();
-		$after  = $this->settings->update( (array) $raw );
-
-		// A slug change needs new rewrite rules, and the render cache embeds
-		// the prefix, the heading and the archive URL.
-		if ( $before['archive_slug'] !== $after['archive_slug'] || $before['archive_enabled'] !== $after['archive_enabled'] ) {
-			update_option( 'advtn_flush_rewrites', 1, false );
-		}
+		// Settings::update() schedules the rewrite flush itself when the archive
+		// slug or its enabled state changes. The render cache is busted here
+		// because it embeds the class prefix, the heading and the archive URL.
+		$this->settings->update( (array) $raw );
 
 		advtn()->renderer()->purge_cache();
 

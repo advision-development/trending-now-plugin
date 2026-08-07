@@ -168,11 +168,21 @@ final class ADVTN_Settings {
 	 * @return array<string,mixed> The stored settings.
 	 */
 	public function update( array $values ): array {
-		$merged = array_merge( $this->all(), $values );
+		$before = $this->all();
+		$merged = array_merge( $before, $values );
 		$clean  = self::sanitize( $merged );
 
 		update_option( self::OPTION_SETTINGS, $clean, true );
 		$this->cache = $clean;
+
+		// The archive's rewrite rules are built from these two, so anything
+		// that changes them has to schedule a flush. This lives here rather
+		// than in the admin handler because the settings are equally reachable
+		// from WP-CLI, a migration or a provisioning script — and a slug change
+		// that never flushes leaves the archive quietly 404ing.
+		if ( $before['archive_slug'] !== $clean['archive_slug'] || $before['archive_enabled'] !== $clean['archive_enabled'] ) {
+			update_option( 'advtn_flush_rewrites', 1, false );
+		}
 
 		return $clean;
 	}
