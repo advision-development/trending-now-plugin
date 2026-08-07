@@ -4,7 +4,7 @@
 #
 #   bin/dev up        start containers and install both sites
 #   bin/dev seed      create sample posts on the source site
-#   bin/dev configure register the source and GDELT sources on the site under test
+#   bin/dev configure register the local and SerpAPI sources on the site under test
 #   bin/dev ingest    run a full ingest cycle synchronously
 #   bin/dev status    plugin diagnostics as JSON
 #   bin/dev verify    assert the rendered widget contains real links
@@ -146,9 +146,9 @@ cmd_seed() {
 cmd_configure() {
 	log "Registering sources on the site under test"
 
-	# GDELT routinely takes 10s+ to answer, well past the 5s production
-	# default. Give the local stack room so the source can be exercised.
-	wp eval 'advtn()->settings()->update( array( "http_timeout" => 25 ) ); echo "http_timeout: " . advtn()->settings()->get_int( "http_timeout", 1, 30 ) . "\n";'
+	# Give the local stack headroom; the production default of 5s is tight for
+	# any news API.
+	wp eval 'advtn()->settings()->update( array( "http_timeout" => 25 ) ); echo "http_timeout: " . advtn()->settings()->get_int( "http_timeout", 1, 60 ) . "\n";'
 
 	# http://source is the container hostname; the REST response still returns
 	# public 127.0.0.1:8081 links, which is what gets stored.
@@ -164,14 +164,15 @@ cmd_configure() {
 				"limit"   => 10,
 			),
 			array(
-				"id"            => "src_gdelt1",
-				"label"         => "Sports news (GDELT)",
-				"type"          => "gdelt",
-				"enabled"       => true,
-				"limit"         => 20,
-				"gdelt_query"   => "sourcelang:english (sportsbook OR \"betting odds\")",
-				"gdelt_domains" => array( "espn.com", "cbssports.com", "si.com" ),
-				"gdelt_timespan"=> "3d",
+				"id"           => "src_serp1",
+				"label"        => "Sports news (SerpAPI)",
+				"type"         => "serpapi",
+				"enabled"      => true,
+				"limit"        => 20,
+				"serp_query"   => "sportsbook OR \"betting odds\"",
+				"serp_domains" => array( "espn.com", "cbssports.com", "si.com" ),
+				"serp_country" => "us",
+				"serp_language"=> "en",
 			),
 		) );
 		echo "sources: " . count( $settings->sources() ) . "\n";

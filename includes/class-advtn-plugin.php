@@ -215,14 +215,13 @@ final class ADVTN_Plugin {
 	/**
 	 * Build a source provider for a given type.
 	 *
-	 * @param string $type One of wp_rest|rss|gdelt|hub.
+	 * @param string $type One of wp_rest|rss|serpapi|hub.
 	 * @return ADVTN_Source_Interface|null
 	 */
 	public function source( string $type ): ?ADVTN_Source_Interface {
 		$map = array(
 			'wp_rest' => 'ADVTN_Source_WP_REST',
 			'rss'     => 'ADVTN_Source_RSS',
-			'gdelt'   => 'ADVTN_Source_GDELT',
 			'serpapi' => 'ADVTN_Source_SerpAPI',
 			'hub'     => 'ADVTN_Source_Hub',
 		);

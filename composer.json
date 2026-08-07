@@ -1,6 +1,6 @@
 {
     "name": "advision-development/trending-now-plugin",
-    "description": "Server-rendered Trending Now link block for WordPress, aggregated from owned sites and GDELT news sources.",
+    "description": "Server-rendered Trending Now link block for WordPress, aggregated from owned sites and Google News.",
     "type": "wordpress-plugin",
     "license": "GPL-2.0-or-later",
     "require": {

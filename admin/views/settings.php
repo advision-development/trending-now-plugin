@@ -101,7 +101,7 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 			<th scope="row"><label for="advtn-news-share"><?php esc_html_e( 'News share (%)', 'trending-now' ); ?></label></th>
 			<td>
 				<input type="number" min="0" max="50" id="advtn-news-share" name="advtn[news_share_pct]" value="<?php echo esc_attr( (string) $advtn_s['news_share_pct'] ); ?>" />
-				<p class="description"><?php esc_html_e( 'Share of slots reserved for GDELT news items. Reallocated to network links when underfilled.', 'trending-now' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Share of slots reserved for third-party news items. Reallocated to network links when underfilled.', 'trending-now' ); ?></p>
 			</td>
 		</tr>
 		<tr>
@@ -142,7 +142,7 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 					<option value="nofollow" <?php selected( (string) $advtn_s['link_rel_external'], 'nofollow' ); ?>>nofollow</option>
 					<option value="sponsored" <?php selected( (string) $advtn_s['link_rel_external'], 'sponsored' ); ?>>sponsored</option>
 				</select>
-				<p class="description"><?php esc_html_e( 'Applies to GDELT news items only. Network links are always plain followed links — that is the point of the plugin.', 'trending-now' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Applies to third-party news items only. Network links are always plain followed links — that is the point of the plugin.', 'trending-now' ); ?></p>
 			</td>
 		</tr>
 	</table>
@@ -208,7 +208,7 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 			<th scope="row"><label for="advtn-http-timeout"><?php esc_html_e( 'HTTP timeout (seconds)', 'trending-now' ); ?></label></th>
 			<td>
 				<input type="number" min="1" max="60" id="advtn-http-timeout" name="advtn[http_timeout]" value="<?php echo esc_attr( (string) $advtn_s['http_timeout'] ); ?>" />
-				<p class="description"><?php esc_html_e( 'Per outbound request. WordPress REST and RSS sources answer in well under a second, but GDELT routinely takes 10-20 seconds — if you use a GDELT source, set this to 30 or it will fail with a timeout every cycle.', 'trending-now' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Per outbound request. WordPress REST and RSS sources answer in well under a second, but SerpAPI usually answers in a couple of seconds. 30 is a safe ceiling.', 'trending-now' ); ?></p>
 			</td>
 		</tr>
 		<tr>

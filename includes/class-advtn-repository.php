@@ -340,7 +340,7 @@ final class ADVTN_Repository {
 	 * Selection candidates for one tier and pool.
 	 *
 	 * @param string $tier                One of 'pinned', 'unseen', 'least_shown'.
-	 * @param string $pool                'news' (gdelt) or 'network' (everything else).
+	 * @param string $pool                'news', 'network' or 'any'; see ADVTN_Source_Base::news_types().
 	 * @param int    $limit               Max rows.
 	 * @param int[]  $exclude_ids         Ids already chosen.
 	 * @param int    $exposure_floor_days Pinned window, for the 'pinned' tier.

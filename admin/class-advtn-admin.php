@@ -227,7 +227,7 @@ final class ADVTN_Admin {
 			}
 
 			// A brand-new blank row: skip it rather than erroring.
-			if ( '' === trim( (string) ( $row['label'] ?? '' ) ) && '' === trim( (string) ( $row['url'] ?? '' ) ) && '' === trim( (string) ( $row['gdelt_query'] ?? '' ) ) ) {
+			if ( '' === trim( (string) ( $row['label'] ?? '' ) ) && '' === trim( (string) ( $row['url'] ?? '' ) ) && '' === trim( (string) ( $row['serp_query'] ?? '' ) ) ) {
 				continue;
 			}
 
@@ -700,7 +700,7 @@ final class ADVTN_Admin {
 		if ( ! in_array( $filters['status'], array( '', 'active', 'stale' ), true ) ) {
 			$filters['status'] = '';
 		}
-		if ( ! in_array( $filters['source_type'], array( '', 'wp_rest', 'rss', 'gdelt' ), true ) ) {
+		if ( ! in_array( $filters['source_type'], array( '', 'wp_rest', 'rss', 'serpapi', 'gdelt' ), true ) ) {
 			$filters['source_type'] = '';
 		}
 

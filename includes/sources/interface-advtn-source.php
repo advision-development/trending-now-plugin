@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 interface ADVTN_Source_Interface {
 
 	/**
-	 * Machine key: 'wp_rest', 'rss', 'gdelt', 'hub'.
+	 * Machine key: 'wp_rest', 'rss', 'serpapi', 'hub'.
 	 *
 	 * @return string
 	 */

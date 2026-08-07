@@ -86,9 +86,59 @@ final class ADVTN_Schema {
 
 		self::install();
 
-		// Future migrations key off $installed here, e.g.:
-		// if ( version_compare( $installed, '2', '<' ) ) { ... }
+		if ( version_compare( $installed, '2', '<' ) ) {
+			self::retire_gdelt_sources();
+		}
+
 		ADVTN_Logger::log( 'info', 'Schema upgraded.', array( 'from' => $installed, 'to' => ADVTN_DB_VERSION ) );
+	}
+
+	/**
+	 * Drop source rows for the removed GDELT provider.
+	 *
+	 * Without this they would sit in the list failing every cycle with "no
+	 * provider registered", and each failure still costs a fetch slot.
+	 *
+	 * Already-ingested GDELT items are deliberately left alone: they are
+	 * perfectly good links, and they age out through the normal stale and
+	 * retention rules.
+	 *
+	 * @return void
+	 */
+	private static function retire_gdelt_sources(): void {
+		$sources = get_option( 'advtn_sources', array() );
+
+		if ( ! is_array( $sources ) ) {
+			return;
+		}
+
+		$kept    = array();
+		$removed = array();
+
+		foreach ( $sources as $source ) {
+			if ( is_array( $source ) && 'gdelt' === ( $source['type'] ?? '' ) ) {
+				$removed[] = (string) ( $source['id'] ?? '?' );
+				continue;
+			}
+			$kept[] = $source;
+		}
+
+		if ( empty( $removed ) ) {
+			return;
+		}
+
+		update_option( 'advtn_sources', array_values( $kept ), false );
+
+		$state = get_option( 'advtn_source_state', array() );
+		if ( is_array( $state ) ) {
+			update_option( 'advtn_source_state', array_diff_key( $state, array_flip( $removed ) ), false );
+		}
+
+		ADVTN_Logger::log(
+			'warning',
+			'Removed GDELT sources: the provider no longer ships. Use a SerpAPI source instead.',
+			array( 'sources' => implode( ', ', $removed ) )
+		);
 	}
 
 	/**

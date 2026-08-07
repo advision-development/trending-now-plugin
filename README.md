@@ -99,23 +99,27 @@ If nothing renders, Diagnostics will say why — see [Troubleshooting](#troubles
 |---|---|---|
 | `wp_rest` | Owned WordPress sites | `/wp-json/wp/v2/posts`. Preferred: `/feed/` is capped by the remote site's `posts_per_rss` with no per-request override. |
 | `rss` | Sites with the REST API disabled | SimplePie via `fetch_feed()`, with its 12-hour cache disabled for the call. |
-| `gdelt` | Third-party news, free | [GDELT DOC 2.0](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/). No API key, but slow and aggressively rate limited. |
-| `serpapi` | Third-party news, paid | Google News via [SerpAPI](https://serpapi.com). Needs a key; **one search credit per fetch**. Faster and far better coverage than GDELT. |
+| `serpapi` | Third-party news | Google News via [SerpAPI](https://serpapi.com). Needs a key; **one search credit per fetch**. |
 
 Each row has a label, an item limit per cycle, an enabled toggle, and drag-to-reorder
-(order sets the ingest stagger). GDELT rows additionally take a query, an allowed-domain
-list and a timespan.
+(order sets the ingest stagger). SerpAPI rows additionally take a query, an optional
+allowed-domain list, country and language.
 
 The tab exports the whole list as JSON and imports it back — merging on source id or
 replacing outright — so a source set can be moved between installs. Imported rows are
 validated exactly as though typed into the form; bad rows are reported and skipped.
 
-Both news providers accept an optional domain allowlist, applied after the response.
+SerpAPI sources take an optional domain allowlist, applied after the response — a news
+aggregator returns whoever it likes unless you constrain it.
 
-> **Choosing between them.** GDELT is free but routinely takes 10–20s and rate-limits at
-> roughly one request per five seconds. SerpAPI is quick and predictable but bills a
-> search credit per fetch — one source on a daily cycle is about 30 credits a month.
-> Whichever you use, set `http_timeout` to 30.
+> **Cost.** One credit per fetch, not per item, so a source on a daily cycle costs about
+> 30 a month regardless of `limit`. Identical repeat queries are served from SerpAPI's own
+> cache and are not billed, so re-testing a row while configuring it is free.
+
+A GDELT provider shipped in 1.0.0 and was removed: free, but 10–20s per request and a rate
+limit of roughly one request per five seconds whose penalty outlasts its own window. Any
+`gdelt` source rows are dropped automatically on upgrade; items already ingested from it
+are kept, still counted as news, and age out normally.
 
 ## Displaying the widget
 
@@ -350,7 +354,7 @@ crawled most often — that is where this earns its keep.
 |---|---|---|
 | `mode` | `direct` | `direct` · `hub` · `spoke` |
 | `widget_limit` | 30 | Links in the widget |
-| `news_share_pct` | 20 | 0–50. Slots reserved for GDELT items |
+| `news_share_pct` | 20 | 0–50. Slots reserved for third-party news |
 | `max_source_share_pct` | 20 | 5–100. Soft cap per source |
 | `exposure_floor_days` | 3 | Guaranteed consecutive days once shown |
 | `retention_days` | 90 | Hard cap on archive size |
@@ -358,7 +362,7 @@ crawled most often — that is where this earns its keep.
 | `stagger_minutes` | 7 | Gap between per-source jobs |
 | `batch_max_sources` | 3 | Sources per queue batch |
 | `batch_time_budget` | 20 | Seconds before bailing and requeueing |
-| `http_timeout` | 5 | 1–60. Per outbound request. Set to 30 if you use GDELT |
+| `http_timeout` | 5 | 1–60. Per outbound request. 30 is a safe ceiling |
 | `source_fail_backoff` | 3600 | Seconds skipped after a failure, ×min(fails, 6) |
 | `archive_slug` | `trending` | Vary per site |
 | `archive_per_page` | 50 | 5–200 |
@@ -366,7 +370,7 @@ crawled most often — that is where this earns its keep.
 | `archive_enabled` | `true` | |
 | `archive_intro` | — | Real copy at the top of the archive |
 | `link_target_blank` | `true` | Adds `rel="noopener"` |
-| `link_rel_external` | `''` | `''` · `nofollow` · `sponsored`. **GDELT items only** |
+| `link_rel_external` | `''` | `''` · `nofollow` · `sponsored`. **News items only** |
 | `heading_text` | `Trending Now` | |
 | `see_all_text` | `See all trending stories` | |
 | `class_prefix` | `advtn` | Vary per site |
@@ -377,7 +381,7 @@ crawled most often — that is where this earns its keep.
 | `auto_update` | `true` | Offer updates from GitHub releases |
 | `delete_data_on_uninstall` | `false` | |
 
-`link_rel_external` applies **only** to news items (`gdelt`, `serpapi`). Internal network
+`link_rel_external` applies **only** to news items (`serpapi`). Internal network
 links stay plain followed links — that is the entire point of the plugin.
 
 ### Credentials as constants
@@ -501,27 +505,17 @@ the lock. A *scheduled* cycle changes nothing until its finalize action runs. Us
 ingest now**, which does the whole thing inline.
 
 **Fewer links than `widget_limit`.** You may simply not have that many items yet — check
-the item counts. Otherwise `news_share_pct` with no GDELT source, or all items stale.
+the item counts. Otherwise `news_share_pct` reserving slots with no news source configured,
+or all items stale.
 
 **A source shows an error and stops being tried.** That is the backoff: `consec_fails`
 raises `backoff_until` by `source_fail_backoff × min(fails, 6)`. **Run ingest now**
 ignores backoff and retries immediately.
 
-**GDELT keeps failing.** It is the awkward one, and its errors mislead.
-
-- *Timeouts.* GDELT typically answers in 10–20 seconds, against a 5-second default. Set
-  `http_timeout` to 30.
-- *`429`.* The limit is roughly **one request every five seconds**, and the penalty
-  outlasts that window — once tripped, expect several minutes of failures. Each **Test
-  fetch** click is a live API call, so repeatedly testing a GDELT row while configuring it
-  is the usual way people trip it.
-- *Misleading error text.* While throttled, GDELT returns plain text with an HTTP `200`
-  saying things like "Your query was too short or too long." or "The specified domain is
-  too short or too long." — even for a single valid domain. **Do not treat those as
-  verdicts on your query while you are being rate limited.** Wait several minutes with no
-  requests, then test once.
-- One request per source per cycle is well within the limit; the problem is almost always
-  interactive testing, not normal operation.
+**A slow or failing source starves the others.** *Run ingest now* works to a
+`batch_time_budget` (20s by default) and queues whatever it cannot reach. One source
+timing out at 12s will push the rest into the background queue, where they wait on cron.
+Fix or disable the failing source rather than raising the budget.
 
 **`401` from the REST API.** Clock skew over 300 seconds, a replayed signature, or the
 message was built wrong — it is `timestamp + "\n" + raw body`, with an *empty* body for
@@ -545,6 +539,7 @@ Each of these was considered and rejected. Please do not add them.
 
 | Rejected | Reason |
 |---|---|
+| GDELT as a news source | Shipped in 1.0.0, then removed: 10–20s per request and a rate limit of one request per five seconds, with a penalty that outlasts it and misleading error text while throttled. |
 | Google Indexing API submission | Only supports `JobPosting` and `BroadcastEvent`. Using it for articles violates the ToS and is a known manual-action trigger. |
 | Client-side / AJAX rendering | Defeats the entire purpose. JS-injected links are crawled far less reliably. |
 | Custom post type for links | Bloats `wp_posts`, leaks into core sitemaps and search, and no editorial UI is needed. |

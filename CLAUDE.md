@@ -5,7 +5,7 @@ Guidance for Claude Code when working in this repository.
 ## What this is
 
 A WordPress plugin (`trending-now`) that renders a server-side "Trending Now" block of
-links aggregated from owned WordPress sites and GDELT news, plus a paginated `/trending/`
+links aggregated from owned WordPress sites and Google News, plus a paginated `/trending/`
 archive. Its purpose is **crawl discovery** — giving every new URL in the network a
 guaranteed window of exposure in an internally-linked, server-rendered block.
 
@@ -109,7 +109,7 @@ These come from the spec and from failures already paid for. Do not relax them.
 5. **Render cache is an option, not a transient**, with no expiry. Object caches evict
    transients under memory pressure; the HTML must survive. Only
    `advtn_finalize_cycle` busts it.
-6. **`link_rel_external` applies only to `source_type = 'gdelt'`.** Internal network
+6. **`link_rel_external` applies only to news types** (`ADVTN_Source_Base::news_types()`). Internal network
    links stay plain followed links — that is the entire point of the plugin.
 7. **Datetimes are UTC everywhere.** Cutoffs are computed in PHP with `gmdate()` and
    passed as prepared parameters; never `NOW()`, which follows the DB server timezone.
@@ -135,7 +135,9 @@ These come from the spec and from failures already paid for. Do not relax them.
 Do not propose or implement these; each was considered and rejected in the spec:
 Google Indexing API submission, client-side rendering, a custom post type for links,
 Elementor/Bricks native widget APIs, Google News RSS as a source, fetching during a
-pageview, requiring WP-CLI.
+pageview, requiring WP-CLI, and GDELT (removed after 1.0.0 — see the README). Note that
+`gdelt` deliberately remains in `ADVTN_Source_Base::news_types()` so rows ingested before
+the removal keep their news classification.
 
 ## Conventions
 

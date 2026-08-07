@@ -34,6 +34,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   place and drives the news/network slot split, the `rel` attribute on external links and
   the `--news` template modifier — previously all three hardcoded `gdelt`.
 
+### Removed
+
+- **The GDELT news source.** Free, but it answered in 10–20 seconds against a rate limit
+  of roughly one request every five seconds whose penalty outlasted its own window, and
+  while throttled it returned misleading errors — a bare, valid `domain:espn.com` came
+  back as "The specified domain is too short or too long." In practice a failing GDELT
+  source also consumed most of the inline ingest budget, pushing healthy sources into the
+  background queue. SerpAPI covers the same need in a couple of seconds.
+
+  `gdelt` source rows are dropped on upgrade (DB version 2) so they cannot sit there
+  failing every cycle. Items already ingested are kept, remain classified as news — the
+  type stays in `news_types()` for exactly that reason — and age out through the normal
+  stale and retention rules.
+
 ### Fixed
 
 - **SerpAPI rejected every query.** The request sent `so` (sort order) alongside `q`,

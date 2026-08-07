@@ -111,7 +111,7 @@ final class ADVTN_Source_Hub extends ADVTN_Source_Base {
 					'site_name'    => (string) ( $raw['site_name'] ?? '' ),
 					// Preserve the upstream type so news share and rel
 					// handling stay correct on the spoke.
-					'source_type'  => in_array( (string) ( $raw['source_type'] ?? '' ), array( 'wp_rest', 'rss', 'gdelt' ), true )
+					'source_type'  => in_array( (string) ( $raw['source_type'] ?? '' ), array( 'wp_rest', 'rss', 'serpapi', 'gdelt' ), true )
 						? (string) $raw['source_type']
 						: 'wp_rest',
 				)

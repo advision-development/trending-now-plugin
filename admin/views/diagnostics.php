@@ -281,7 +281,7 @@ $advtn_base     = admin_url( 'admin.php?page=' . ADVTN_Admin::MENU_SLUG . '&tab=
 
 	<select name="f_type">
 		<option value=""><?php esc_html_e( 'All types', 'trending-now' ); ?></option>
-		<?php foreach ( array( 'wp_rest', 'rss', 'gdelt' ) as $advtn_t ) : ?>
+		<?php foreach ( array( 'wp_rest', 'rss', 'serpapi' ) as $advtn_t ) : ?>
 			<option value="<?php echo esc_attr( $advtn_t ); ?>" <?php selected( $advtn_filters['source_type'], $advtn_t ); ?>><?php echo esc_html( $advtn_t ); ?></option>
 		<?php endforeach; ?>
 	</select>

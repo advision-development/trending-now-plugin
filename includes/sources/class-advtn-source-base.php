@@ -31,7 +31,10 @@ abstract class ADVTN_Source_Base implements ADVTN_Source_Interface {
 		 *
 		 * @param string[] $types Source type keys.
 		 */
-		return (array) apply_filters( 'advtn_news_source_types', array( 'gdelt', 'serpapi' ) );
+		// 'gdelt' has no provider any more, but rows ingested while it did are
+		// still news: dropping it here would silently move them into the
+		// network pool and strip their rel attribute and --news modifier.
+		return (array) apply_filters( 'advtn_news_source_types', array( 'serpapi', 'gdelt' ) );
 	}
 
 	/**
