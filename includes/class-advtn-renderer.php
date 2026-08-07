@@ -479,38 +479,44 @@ final class ADVTN_Renderer {
 	public function css(): string {
 		$p = $this->settings->get_string( 'class_prefix' );
 
+		// Selectors are deliberately compounded (.p.p--news) and the
+		// structural properties marked important. This markup lands inside
+		// arbitrary themes, and a theme rule like `.entry-content ul li`
+		// (0,2,1) outranks a plain `.p--news .p__item` (0,2,0) — which shows
+		// up as bullets reappearing and the row losing `display:flex`, so the
+		// thumbnail drops below the headline instead of sitting beside it.
 		$css = ".{$p}{margin:2rem 0}"
-			. ".{$p}__heading{margin:0 0 .75rem}"
-			. ".{$p}__items{list-style:none;margin:0;padding:0;display:grid;gap:.5rem}"
-			. ".{$p}--cards .{$p}__items{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem}"
-			. ".{$p}__item{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem .6rem;line-height:1.4}"
-			. ".{$p}--cards .{$p}__item{display:block}"
-			. ".{$p}__link{font-weight:600;text-decoration:none}"
-			. ".{$p}__link:hover,.{$p}__link:focus{text-decoration:underline}"
-			. ".{$p}__source,.{$p}__date{font-size:.8em;opacity:.7}"
-			. ".{$p}__excerpt{flex-basis:100%;margin:.15rem 0 0;font-size:.9em;opacity:.85}"
-			. ".{$p}__thumb{display:block;width:100%;height:auto;margin-bottom:.5rem;border-radius:4px}"
-			. ".{$p}__more{margin:1rem 0 0}"
-			. "@media(max-width:600px){.{$p}__item{gap:.25rem .5rem}}"
+			. ".{$p} .{$p}__heading{margin:0 0 .75rem}"
+			. ".{$p} .{$p}__items{list-style:none!important;margin:0!important;padding:0!important;display:grid;gap:.5rem}"
+			. ".{$p} .{$p}__items>.{$p}__item{list-style:none!important;margin:0;text-indent:0}"
+			. ".{$p} .{$p}__items>.{$p}__item::marker{content:none}"
+			. ".{$p}.{$p}--cards .{$p}__items{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem}"
+			. ".{$p} .{$p}__item{display:flex;flex-wrap:wrap;align-items:baseline;gap:.4rem .6rem;line-height:1.4}"
+			. ".{$p}.{$p}--cards .{$p}__item{display:block}"
+			. ".{$p} .{$p}__link{font-weight:600;text-decoration:none}"
+			. ".{$p} .{$p}__link:hover,.{$p} .{$p}__link:focus{text-decoration:underline}"
+			. ".{$p} .{$p}__source,.{$p} .{$p}__date{font-size:.8em;opacity:.7}"
+			. ".{$p} .{$p}__excerpt{flex-basis:100%;margin:.15rem 0 0;font-size:.9em;opacity:.85}"
+			. ".{$p} .{$p}__thumb{display:block;width:100%;height:auto;margin-bottom:.5rem;border-radius:4px}"
+			. ".{$p} .{$p}__more{margin:1rem 0 0}"
+			. "@media(max-width:600px){.{$p} .{$p}__item{gap:.25rem .5rem}}"
 			// News layout: card rows with the thumbnail on the right, after the
 			// Google News / MSN feed. Colours inherit from the theme, with
 			// currentColor tints so it sits correctly on light and dark.
-			. ".{$p}--news .{$p}__items{gap:0}"
-			. ".{$p}--news .{$p}__item{display:flex;flex-wrap:nowrap;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.9rem 0;border-bottom:1px solid rgba(128,128,128,.25)}"
-			. ".{$p}--news .{$p}__item:last-child{border-bottom:0}"
+			. ".{$p}.{$p}--news .{$p}__items{gap:0;display:block}"
+			. ".{$p}.{$p}--news .{$p}__items>.{$p}__item{display:flex!important;flex-wrap:nowrap!important;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.9rem 0;border-bottom:1px solid rgba(128,128,128,.25)}"
+			. ".{$p}.{$p}--news .{$p}__items>.{$p}__item:last-child{border-bottom:0}"
 			// flex:1 means basis 0, so a long headline cannot claim the whole
-			// line and shove the thumbnail onto the next one. The base __item
-			// rule sets flex-wrap:wrap for the list layout, which is why the
-			// nowrap reset above matters too.
-			. ".{$p}--news .{$p}__body{flex:1;min-width:0}"
-			. ".{$p}--news .{$p}__meta{display:flex;align-items:center;gap:.4rem;margin:0 0 .25rem;font-size:.78em;opacity:.7;line-height:1.2}"
-			. ".{$p}--news .{$p}__source{font-weight:600}"
-			. ".{$p}--news .{$p}__source+.{$p}__date::before{content:'·';margin-right:.4rem;opacity:.7}"
-			. ".{$p}--news .{$p}__link{display:block;font-size:1.02em;font-weight:600;line-height:1.35}"
-			. ".{$p}--news .{$p}__media{flex:0 0 auto;width:120px}"
-			. ".{$p}--news .{$p}__thumb{display:block;width:120px;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin:0}"
-			. "@media(max-width:480px){.{$p}--news .{$p}__media,.{$p}--news .{$p}__thumb{width:88px}}"
-			. ".{$p}__icon{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-align:-3px;flex:0 0 auto;margin:0}"
+			// line and shove the thumbnail onto the next one.
+			. ".{$p}.{$p}--news .{$p}__body{flex:1;min-width:0}"
+			. ".{$p}.{$p}--news .{$p}__meta{display:flex;align-items:center;gap:.4rem;margin:0 0 .25rem;font-size:.78em;opacity:.7;line-height:1.2}"
+			. ".{$p}.{$p}--news .{$p}__source{font-weight:600}"
+			. ".{$p}.{$p}--news .{$p}__source+.{$p}__date::before{content:'\u{b7}';margin-right:.4rem;opacity:.7}"
+			. ".{$p}.{$p}--news .{$p}__link{display:block;font-size:1.02em;font-weight:600;line-height:1.35}"
+			. ".{$p}.{$p}--news .{$p}__media{flex:0 0 auto;width:120px;margin:0}"
+			. ".{$p}.{$p}--news .{$p}__thumb{display:block;width:120px;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin:0}"
+			. "@media(max-width:480px){.{$p}.{$p}--news .{$p}__media,.{$p}.{$p}--news .{$p}__thumb{width:88px}}"
+			. ".{$p} .{$p}__icon{display:inline-block;width:16px;height:16px;border-radius:3px;vertical-align:-3px;flex:0 0 auto;margin:0}"
 			. ".{$p}-archive{max-width:820px;margin:0 auto;padding:0 1rem}"
 			. ".{$p}-archive__header{margin:0 0 1.5rem}"
 			. ".{$p}-archive__intro{opacity:.85}"

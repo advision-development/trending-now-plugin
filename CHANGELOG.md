@@ -5,6 +5,24 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The widget's own styles lost to the host theme.** Two separate causes, both visible on
+  a live site as bullet points reappearing and the thumbnail dropping below the headline
+  instead of sitting beside it.
+
+  `list-style: none` was set on the `<ul>` only. That value *inherits* to each `<li>`, and
+  an inherited value loses to **any** direct declaration on the element — even a generic
+  `li { list-style: disc }` at specificity (0,0,1). It is now set on the list items
+  themselves, with `::marker { content: none }` behind it.
+
+  The structural rules were also written at specificity (0,2,0), which a routine theme
+  selector such as `.entry-content ul li` (0,2,1) outranks. Selectors are now compounded
+  on the root class, and `display`, `flex-wrap`, `list-style`, `margin` and `padding` are
+  marked important — this markup is dropped into arbitrary themes and has to win.
+
 ## [1.1.1] — 2026-08-07
 
 ### Fixed

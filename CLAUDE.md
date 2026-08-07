@@ -188,6 +188,10 @@ the removal keep their news classification.
 - Display defaults (`layout`, `show_images`, `show_source`, `show_date`) live in Settings;
   the shortcode and block only override keys that were explicitly supplied, so leaving an
   attribute off inherits rather than silently forcing a value.
+- The generated stylesheet has to survive arbitrary host themes. Selectors are compounded
+  on the root class (`.p.p--news .p__items>.p__item`) and the structural properties are
+  `!important` on purpose. `list-style` must be set on the list items, not only the list:
+  inheritance loses to any direct `li` declaration regardless of specificity.
 - Nothing an ingest writes is visible until `finalize()` runs: it is what commits the
   selection and busts the render cache. When debugging "my items are not showing", check
   `advtn_last_ingest` and the lock before suspecting the fetch.
