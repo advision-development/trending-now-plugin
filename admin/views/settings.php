@@ -79,6 +79,58 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 			<td><input type="number" min="1" max="200" id="advtn-widget-limit" name="advtn[widget_limit]" value="<?php echo esc_attr( (string) $advtn_s['widget_limit'] ); ?>" /></td>
 		</tr>
 		<tr>
+			<th scope="row"><label for="advtn-layout"><?php esc_html_e( 'Layout', 'trending-now' ); ?></label></th>
+			<td>
+				<select id="advtn-layout" name="advtn[layout]">
+					<?php
+					$advtn_layouts = array(
+						'list'  => __( 'List — compact text links', 'trending-now' ),
+						'news'  => __( 'News — source, headline and thumbnail (Google News style)', 'trending-now' ),
+						'cards' => __( 'Cards — grid with images and excerpts', 'trending-now' ),
+					);
+					foreach ( $advtn_layouts as $advtn_key => $advtn_label ) :
+						?>
+						<option value="<?php echo esc_attr( $advtn_key ); ?>" <?php selected( (string) $advtn_s['layout'], $advtn_key ); ?>><?php echo esc_html( $advtn_label ); ?></option>
+					<?php endforeach; ?>
+				</select>
+				<p class="description"><?php esc_html_e( 'The default for the shortcode, the block and the template tag. Any of them can still override it per instance.', 'trending-now' ); ?></p>
+			</td>
+		</tr>
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Show', 'trending-now' ); ?></th>
+			<td>
+				<label><input type="checkbox" name="advtn[show_images]" value="1" <?php checked( ! empty( $advtn_s['show_images'] ) ); ?> /> <?php esc_html_e( 'Thumbnails', 'trending-now' ); ?></label><br />
+				<label><input type="checkbox" name="advtn[show_source]" value="1" <?php checked( ! empty( $advtn_s['show_source'] ) ); ?> /> <?php esc_html_e( 'Source name', 'trending-now' ); ?></label><br />
+				<label><input type="checkbox" name="advtn[show_date]" value="1" <?php checked( ! empty( $advtn_s['show_date'] ) ); ?> /> <?php esc_html_e( 'Timestamp', 'trending-now' ); ?></label>
+				<p class="description"><?php esc_html_e( 'Thumbnails are lazy-loaded below the first card and carry fixed dimensions, so they do not shift the layout as they arrive. Timestamps show as 45m or 6h within the last day, and a date before that.', 'trending-now' ); ?></p>
+			</td>
+		</tr>
+		<tr>
+			<th scope="row"><label for="advtn-max-age"><?php esc_html_e( 'Maximum age (hours)', 'trending-now' ); ?></label></th>
+			<td>
+				<input type="number" min="0" max="720" id="advtn-max-age" name="advtn[max_age_hours]" value="<?php echo esc_attr( (string) $advtn_s['max_age_hours'] ); ?>" />
+				<p class="description">
+					<?php esc_html_e( 'Hide anything published longer ago than this. 0 disables the cutoff; 48 means nothing older than two days. Curated links are exempt — they have their own expiry.', 'trending-now' ); ?>
+					<?php
+					$advtn_age   = (int) $advtn_s['max_age_hours'];
+					$advtn_floor = (int) $advtn_s['exposure_floor_days'];
+					if ( $advtn_age > 0 && ( $advtn_floor * 24 ) > $advtn_age ) :
+						?>
+						<br /><strong>
+						<?php
+						printf(
+							/* translators: 1: exposure floor in days, 2: cutoff in hours. */
+							esc_html__( 'Note: the exposure floor is %1$d days but the cutoff is %2$d hours, so items are dropped before their guaranteed run finishes. Lower the floor to match.', 'trending-now' ),
+							$advtn_floor,
+							$advtn_age
+						);
+						?>
+						</strong>
+					<?php endif; ?>
+				</p>
+			</td>
+		</tr>
+		<tr>
 			<th scope="row"><label for="advtn-heading-text"><?php esc_html_e( 'Heading', 'trending-now' ); ?></label></th>
 			<td><input type="text" class="regular-text" id="advtn-heading-text" name="advtn[heading_text]" value="<?php echo esc_attr( (string) $advtn_s['heading_text'] ); ?>" /></td>
 		</tr>

@@ -5,6 +5,31 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Maximum age cutoff** (`max_age_hours`). Hides anything published longer ago than the
+  configured window — 48 for a two-day feed, 0 to disable. Applied before the selection
+  tiers, so it outranks the exposure floor; the admin warns when a floor is set longer
+  than the cutoff, because that combination promises a run the cutoff will not let
+  finish. Curated links are exempt, since they carry their own expiry.
+- **`news` layout** — source name, relative timestamp, headline and a right-hand
+  thumbnail, after the Google News and MSN feed cards. Thumbnails carry fixed dimensions
+  so they reserve their space rather than shifting the layout as they load, everything
+  below the first card is lazy-loaded, and the first is fetched eagerly because it is
+  usually the one above the fold.
+- **Relative timestamps.** Under an hour reads `45m`, under a day `6h`, and anything
+  older keeps its date. The `datetime` attribute stays a full ISO timestamp.
+- **Display settings.** Layout, thumbnails, source names and timestamps are now
+  configurable in the admin and act as the defaults for the shortcode, block and template
+  tag; each entry point overrides only what it explicitly sets, so an omitted attribute
+  inherits rather than forcing a value.
+- **SerpAPI Top stories mode.** Google News' mainstream front page for a country and
+  language, with no query. Confirmed against the live API — NPR, CNBC, USA Today, CNN and
+  the New York Times, all with thumbnails. Note that it returns about ten articles per
+  fetch, so a large news share wants more than one source.
+
 ## [1.1.0] — 2026-08-07
 
 > **Upgrading from 1.0.0 requires one manual install.** The update mechanism ships *in*

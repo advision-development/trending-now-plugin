@@ -438,9 +438,10 @@ final class ADVTN_Repository {
 	 * @param int    $limit               Max rows.
 	 * @param int[]  $exclude_ids         Ids already chosen.
 	 * @param int    $exposure_floor_days Pinned window, for the 'pinned' tier.
+	 * @param string $max_age_cutoff      Oldest acceptable published_at, or ''.
 	 * @return array<int,array<string,mixed>>
 	 */
-	public function candidates( string $tier, string $pool, int $limit, array $exclude_ids = array(), int $exposure_floor_days = 3 ): array {
+	public function candidates( string $tier, string $pool, int $limit, array $exclude_ids = array(), int $exposure_floor_days = 3, string $max_age_cutoff = '' ): array {
 		global $wpdb;
 
 		$limit = max( 0, $limit );
@@ -482,6 +483,14 @@ final class ADVTN_Repository {
 				return array();
 		}
 
+		// Curated links are exempt: they carry their own expiry, so an editor
+		// pinning something older than the cutoff is a deliberate choice.
+		if ( '' !== $max_age_cutoff ) {
+			$where[]  = '( source_type = %s OR ( published_at IS NOT NULL AND published_at >= %s ) )';
+			$params[] = 'manual';
+			$params[] = $max_age_cutoff;
+		}
+
 		$exclude_ids = $this->clean_ids( $exclude_ids );
 		if ( ! empty( $exclude_ids ) ) {
 			$where[] = 'id NOT IN (' . $this->placeholders( $exclude_ids ) . ')';
@@ -505,14 +514,25 @@ final class ADVTN_Repository {
 	/**
 	 * Newest active items, used as the render fallback when no selection exists.
 	 *
-	 * @param int $limit Max rows.
+	 * @param int    $limit          Max rows.
+	 * @param string $max_age_cutoff Oldest acceptable published_at, or ''.
 	 * @return array<int,array<string,mixed>>
 	 */
-	public function recent_active( int $limit ): array {
+	public function recent_active( int $limit, string $max_age_cutoff = '' ): array {
 		global $wpdb;
 
-		$limit = max( 1, min( 500, $limit ) );
-		$table = $this->table();
+		$limit  = max( 1, min( 500, $limit ) );
+		$table  = $this->table();
+		$params = array();
+		$age    = '';
+
+		if ( '' !== $max_age_cutoff ) {
+			$age      = ' AND ( source_type = %s OR ( published_at IS NOT NULL AND published_at >= %s ) )';
+			$params[] = 'manual';
+			$params[] = $max_age_cutoff;
+		}
+
+		$params[] = $limit;
 
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
 		$rows = $wpdb->get_results(
@@ -520,10 +540,10 @@ final class ADVTN_Repository {
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				"SELECT id, url, title, excerpt, image_url, published_at, site_name, host, source_id, source_type, times_shown, first_shown_at
 				 FROM {$table}
-				 WHERE status = 'active'
+				 WHERE status = 'active'{$age}
 				 ORDER BY published_at DESC, id DESC
 				 LIMIT %d",
-				$limit
+				$params
 			),
 			ARRAY_A
 		);

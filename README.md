@@ -110,8 +110,15 @@ The tab exports the whole list as JSON and imports it back — merging on source
 replacing outright — so a source set can be moved between installs. Imported rows are
 validated exactly as though typed into the form; bad rows are reported and skipped.
 
-SerpAPI sources take an optional domain allowlist, applied after the response — a news
-aggregator returns whoever it likes unless you constrain it.
+A SerpAPI source runs in one of two modes. **Top stories** is Google News' mainstream
+front page for the country and language you pick — no query needed, and the usual source
+of a general news mix. **Search query** takes a query string, where Google operators such
+as `site:` work. Either mode takes an optional domain allowlist, applied after the
+response, since an aggregator returns whoever it likes unless constrained.
+
+> Top stories returns roughly ten articles per fetch. If your news share needs more than
+> that — say 50% of a 30-link widget — add a second news source rather than expecting one
+> call to fill it.
 
 > **Cost.** One credit per fetch, not per item, so a source on a daily cycle costs about
 > 30 a month regardless of `limit`. Identical repeat queries are served from SerpAPI's own
@@ -161,6 +168,16 @@ Gutenberg, classic widgets and theme templates:
 ```
 
 **Block** — *Trending Now*, with the same options in the inspector.
+
+Three layouts. **`news`** is the Google News / MSN style: source name and a relative
+timestamp, the headline, and a thumbnail on the right. Thumbnails carry fixed dimensions
+so they reserve their space instead of shifting the layout, and everything below the first
+card is lazy-loaded — the first is fetched eagerly because it is usually the one above the
+fold. **`list`** is compact text links, **`cards`** a grid with excerpts.
+
+Timestamps are relative inside the last day — `45m`, `6h` — and a date before that, which
+is what makes a feed read as current at a glance. The `datetime` attribute is always the
+full ISO timestamp.
 
 **Template tags:**
 
@@ -224,6 +241,17 @@ Runs once per cycle, after ingest and pruning.
 **Slots.** `widget_limit` splits into news (`news_share_pct`) and network. Either side
 reallocates to the other when it underfills. A per-source cap of `max_source_share_pct`
 keeps one source from dominating.
+
+> **The cap and the news share have to agree.** `news_share_pct` of 50 with a single news
+> source needs `max_source_share_pct` at 50 too, or the cap throttles that source to a
+> fraction of its quota and the shortfall is backfilled with network links. Either raise
+> the cap or spread the news across more sources.
+
+**Age cutoff.** `max_age_hours` drops anything published longer ago than that — `48` for a
+two-day window, `0` to disable. It applies before the tiers, so it beats the exposure
+floor: with a 48-hour cutoff, an `exposure_floor_days` of 3 promises a run the cutoff will
+not let it finish. Keep the floor under the cutoff. Curated links are exempt, since they
+carry their own expiry.
 
 **Three tiers, filled in order:**
 
@@ -381,6 +409,9 @@ crawled most often — that is where this earns its keep.
 |---|---|---|
 | `mode` | `direct` | `direct` · `hub` · `spoke` |
 | `widget_limit` | 30 | Links in the widget |
+| `max_age_hours` | 0 | 0–720. Hide anything older. `48` = nothing over two days |
+| `layout` | `list` | `list` · `news` · `cards`. Default for shortcode, block and template tag |
+| `show_images` / `show_source` / `show_date` | off / on / on | Display defaults |
 | `news_share_pct` | 20 | 0–50. Slots reserved for third-party news |
 | `max_source_share_pct` | 20 | 5–100. Soft cap per source |
 | `exposure_floor_days` | 3 | Guaranteed consecutive days once shown |

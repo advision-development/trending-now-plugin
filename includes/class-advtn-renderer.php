@@ -147,20 +147,22 @@ final class ADVTN_Renderer {
 	 * @return array<string,mixed>
 	 */
 	public function normalize_args( array $args ): array {
+		// Defaults come from Settings so the admin screen actually controls the
+		// widget; the shortcode and block override per instance.
 		$defaults = array(
 			'limit'        => $this->settings->get_int( 'widget_limit', 1, 200 ),
-			'layout'       => 'list',
+			'layout'       => $this->settings->get_string( 'layout' ),
 			'heading'      => $this->settings->get_string( 'heading_text' ),
-			'show_images'  => false,
-			'show_source'  => true,
-			'show_date'    => true,
+			'show_images'  => $this->settings->get_bool( 'show_images' ),
+			'show_source'  => $this->settings->get_bool( 'show_source' ),
+			'show_date'    => $this->settings->get_bool( 'show_date' ),
 			'show_see_all' => true,
 		);
 
 		$args = array_merge( $defaults, array_intersect_key( $args, $defaults ) );
 
 		$args['limit']        = max( 1, min( 200, (int) $args['limit'] ) );
-		$args['layout']       = in_array( $args['layout'], array( 'list', 'cards' ), true ) ? $args['layout'] : 'list';
+		$args['layout']       = in_array( $args['layout'], ADVTN_Settings::layouts(), true ) ? $args['layout'] : 'list';
 		$args['heading']      = sanitize_text_field( (string) $args['heading'] );
 		$args['show_images']  = $this->to_bool( $args['show_images'] );
 		$args['show_source']  = $this->to_bool( $args['show_source'] );
@@ -221,9 +223,24 @@ final class ADVTN_Renderer {
 			return null;
 		}
 
+		$age = time() - $timestamp;
+
+		// Under a day, a relative stamp reads as "this is current" at a glance,
+		// which a bare date does not. Older than that, the date is the more
+		// useful fact. Mirrors how Google News and MSN present it.
+		if ( $age >= 0 && $age < DAY_IN_SECONDS ) {
+			$label = $age < HOUR_IN_SECONDS
+				/* translators: %d: whole minutes. */
+				? sprintf( _x( '%dm', 'minutes ago', 'trending-now' ), max( 1, (int) floor( $age / MINUTE_IN_SECONDS ) ) )
+				/* translators: %d: whole hours. */
+				: sprintf( _x( '%dh', 'hours ago', 'trending-now' ), (int) floor( $age / HOUR_IN_SECONDS ) );
+		} else {
+			$label = (string) wp_date( 'M j', $timestamp );
+		}
+
 		return array(
 			'iso'   => gmdate( 'c', $timestamp ),
-			'label' => (string) wp_date( 'M j', $timestamp ),
+			'label' => $label,
 		);
 	}
 
@@ -256,7 +273,7 @@ final class ADVTN_Renderer {
 		if ( empty( $rows ) ) {
 			// No committed selection yet — fall back to a direct query rather
 			// than rendering nothing on a fresh install.
-			$rows = $this->repository->recent_active( $args['limit'] );
+			$rows = $this->repository->recent_active( $args['limit'], $this->settings->max_age_cutoff() );
 		}
 
 		if ( empty( $rows ) ) {
@@ -370,7 +387,21 @@ final class ADVTN_Renderer {
 			. ".{$p}__excerpt{flex-basis:100%;margin:.15rem 0 0;font-size:.9em;opacity:.85}"
 			. ".{$p}__thumb{display:block;width:100%;height:auto;margin-bottom:.5rem;border-radius:4px}"
 			. ".{$p}__more{margin:1rem 0 0}"
-			. "@media(max-width:600px){.{$p}__item{gap:.25rem .5rem}}";
+			. "@media(max-width:600px){.{$p}__item{gap:.25rem .5rem}}"
+			// News layout: card rows with the thumbnail on the right, after the
+			// Google News / MSN feed. Colours inherit from the theme, with
+			// currentColor tints so it sits correctly on light and dark.
+			. ".{$p}--news .{$p}__items{gap:0}"
+			. ".{$p}--news .{$p}__item{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:.9rem 0;border-bottom:1px solid rgba(128,128,128,.25)}"
+			. ".{$p}--news .{$p}__item:last-child{border-bottom:0}"
+			. ".{$p}--news .{$p}__body{flex:1 1 auto;min-width:0}"
+			. ".{$p}--news .{$p}__meta{display:flex;align-items:center;gap:.4rem;margin:0 0 .25rem;font-size:.78em;opacity:.7;line-height:1.2}"
+			. ".{$p}--news .{$p}__source{font-weight:600}"
+			. ".{$p}--news .{$p}__source+.{$p}__date::before{content:'·';margin-right:.4rem;opacity:.7}"
+			. ".{$p}--news .{$p}__link{display:block;font-size:1.02em;font-weight:600;line-height:1.35}"
+			. ".{$p}--news .{$p}__media{flex:0 0 auto;width:120px}"
+			. ".{$p}--news .{$p}__thumb{display:block;width:120px;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:8px;margin:0}"
+			. "@media(max-width:480px){.{$p}--news .{$p}__media,.{$p}--news .{$p}__thumb{width:88px}}";
 
 		/**
 		 * Filters the inline widget stylesheet.

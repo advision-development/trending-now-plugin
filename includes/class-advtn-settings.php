@@ -33,6 +33,11 @@ final class ADVTN_Settings {
 		return array(
 			'mode'                     => 'direct',
 			'widget_limit'             => 30,
+			'max_age_hours'            => 0,
+			'layout'                   => 'list',
+			'show_images'              => false,
+			'show_source'              => true,
+			'show_date'                => true,
 			'news_share_pct'           => 20,
 			'max_source_share_pct'     => 20,
 			'exposure_floor_days'      => 3,
@@ -201,6 +206,8 @@ final class ADVTN_Settings {
 		$out['mode']   = in_array( $mode, array( 'direct', 'hub', 'spoke' ), true ) ? $mode : 'direct';
 
 		$out['widget_limit']          = self::clamp_int( $input['widget_limit'] ?? $d['widget_limit'], 1, 200 );
+		// 0 disables the cutoff entirely; 720 is 30 days.
+		$out['max_age_hours']         = self::clamp_int( $input['max_age_hours'] ?? $d['max_age_hours'], 0, 720 );
 		$out['news_share_pct']        = self::clamp_int( $input['news_share_pct'] ?? $d['news_share_pct'], 0, 50 );
 		$out['max_source_share_pct']  = self::clamp_int( $input['max_source_share_pct'] ?? $d['max_source_share_pct'], 5, 100 );
 		$out['exposure_floor_days']   = self::clamp_int( $input['exposure_floor_days'] ?? $d['exposure_floor_days'], 0, 30 );
@@ -220,6 +227,13 @@ final class ADVTN_Settings {
 
 		$prefix                = preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) ( $input['class_prefix'] ?? $d['class_prefix'] ) ) );
 		$out['class_prefix']   = '' !== (string) $prefix ? (string) $prefix : $d['class_prefix'];
+
+		$layout         = (string) ( $input['layout'] ?? $d['layout'] );
+		$out['layout']  = in_array( $layout, self::layouts(), true ) ? $layout : 'list';
+
+		$out['show_images'] = ! empty( $input['show_images'] );
+		$out['show_source'] = ! empty( $input['show_source'] );
+		$out['show_date']   = ! empty( $input['show_date'] );
 
 		$out['archive_noindex']          = ! empty( $input['archive_noindex'] );
 		$out['archive_enabled']          = ! empty( $input['archive_enabled'] );
@@ -247,6 +261,26 @@ final class ADVTN_Settings {
 		$out['ingest_secret'] = preg_replace( '/[^A-Za-z0-9]/', '', (string) ( $input['ingest_secret'] ?? '' ) ) ?? '';
 
 		return $out;
+	}
+
+	/**
+	 * Available widget layouts.
+	 *
+	 * @return string[]
+	 */
+	public static function layouts(): array {
+		return array( 'list', 'cards', 'news' );
+	}
+
+	/**
+	 * The published_at cutoff, or '' when no cutoff is configured.
+	 *
+	 * @return string 'Y-m-d H:i:s' in UTC, or ''.
+	 */
+	public function max_age_cutoff(): string {
+		$hours = $this->get_int( 'max_age_hours', 0, 720 );
+
+		return $hours > 0 ? gmdate( 'Y-m-d H:i:s', time() - ( $hours * HOUR_IN_SECONDS ) ) : '';
 	}
 
 	/**

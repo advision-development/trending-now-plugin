@@ -79,12 +79,18 @@ final class ADVTN_Block {
 	 */
 	public function render( array $attributes = array() ): string {
 		$args = array(
-			'layout'       => (string) ( $attributes['layout'] ?? 'list' ),
-			'show_images'  => ! empty( $attributes['showImages'] ),
-			'show_source'  => ! isset( $attributes['showSource'] ) || (bool) $attributes['showSource'],
-			'show_date'    => ! isset( $attributes['showDate'] ) || (bool) $attributes['showDate'],
 			'show_see_all' => ! isset( $attributes['showSeeAll'] ) || (bool) $attributes['showSeeAll'],
 		);
+
+		// Unset attributes inherit the Settings defaults.
+		if ( ! empty( $attributes['layout'] ) ) {
+			$args['layout'] = (string) $attributes['layout'];
+		}
+		foreach ( array( 'showImages' => 'show_images', 'showSource' => 'show_source', 'showDate' => 'show_date' ) as $attr => $key ) {
+			if ( isset( $attributes[ $attr ] ) ) {
+				$args[ $key ] = (bool) $attributes[ $attr ];
+			}
+		}
 
 		if ( ! empty( $attributes['limit'] ) ) {
 			$args['limit'] = (int) $attributes['limit'];

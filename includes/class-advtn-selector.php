@@ -64,6 +64,7 @@ final class ADVTN_Selector {
 		// Curated links are editorial decisions, so they are placed rather than
 		// competing: they reserve their slots before the tiers run, and are
 		// excluded from the candidate pool so they cannot also be picked.
+		$cutoff    = $this->settings->max_age_cutoff();
 		$manual    = $this->manual_rows();
 		$auto_slots = max( 0, $limit - count( $manual ) );
 
@@ -78,13 +79,13 @@ final class ADVTN_Selector {
 			$selected[ (int) $row['id'] ] = $row;
 		}
 
-		$this->fill( 'network', $network_slots, $selected, $source_counts, $cap, $floor );
-		$this->fill( 'news', $news_slots, $selected, $source_counts, $cap, $floor );
+		$this->fill( 'network', $network_slots, $selected, $source_counts, $cap, $floor, $cutoff );
+		$this->fill( 'news', $news_slots, $selected, $source_counts, $cap, $floor, $cutoff );
 
 		// Reallocate whatever either category left on the table.
 		$remaining = $auto_slots - ( count( $selected ) - count( $manual ) );
 		if ( $remaining > 0 ) {
-			$this->fill( 'any', $remaining, $selected, $source_counts, $cap, $floor );
+			$this->fill( 'any', $remaining, $selected, $source_counts, $cap, $floor, $cutoff );
 		}
 
 		// Last resort: never render fewer items than are available (spec §7.1).
@@ -94,7 +95,7 @@ final class ADVTN_Selector {
 		// items sit unselected. Diversity is preferred, not mandatory.
 		$remaining = $auto_slots - ( count( $selected ) - count( $manual ) );
 		if ( $remaining > 0 ) {
-			$relaxed = $this->fill( 'any', $remaining, $selected, $source_counts, PHP_INT_MAX, $floor );
+			$relaxed = $this->fill( 'any', $remaining, $selected, $source_counts, PHP_INT_MAX, $floor, $cutoff );
 
 			if ( $relaxed > 0 ) {
 				ADVTN_Logger::log(
@@ -276,9 +277,10 @@ final class ADVTN_Selector {
 	 * @param array<string,int>                   $source_counts Running per-source tally. Passed by reference.
 	 * @param int                                 $cap           Per-source slot cap.
 	 * @param int                                 $floor         Exposure floor in days.
+	 * @param string                              $cutoff        Oldest acceptable published_at, or ''.
 	 * @return int Slots actually filled.
 	 */
-	private function fill( string $pool, int $slots, array &$selected, array &$source_counts, int $cap, int $floor ): int {
+	private function fill( string $pool, int $slots, array &$selected, array &$source_counts, int $cap, int $floor, string $cutoff = '' ): int {
 		if ( $slots <= 0 ) {
 			return 0;
 		}
@@ -296,7 +298,7 @@ final class ADVTN_Selector {
 			// replacements from the same query.
 			$fetch = min( 500, ( $need * 5 ) + 50 );
 
-			$candidates = $this->repository->candidates( $tier, $pool, $fetch, array_keys( $selected ), $floor );
+			$candidates = $this->repository->candidates( $tier, $pool, $fetch, array_keys( $selected ), $floor, $cutoff );
 
 			foreach ( $candidates as $row ) {
 				if ( $taken >= $slots ) {

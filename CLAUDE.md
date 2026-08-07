@@ -175,6 +175,12 @@ the removal keep their news classification.
   anything else. Expiry sets the row to `stale` rather than deleting it — leaving it
   `active` would merely stop it being *placed* while it carried on competing as an
   ordinary candidate, which looks exactly like the timer not working.
+- `max_age_hours` filters candidates in `ADVTN_Repository::candidates()`, before the tiers,
+  so it outranks the exposure floor. A floor longer than the cutoff promises a run that
+  cannot complete — the admin flags the mismatch. Curated links are exempt.
+- Display defaults (`layout`, `show_images`, `show_source`, `show_date`) live in Settings;
+  the shortcode and block only override keys that were explicitly supplied, so leaving an
+  attribute off inherits rather than silently forcing a value.
 - Nothing an ingest writes is visible until `finalize()` runs: it is what commits the
   selection and busts the render cache. When debugging "my items are not showing", check
   `advtn_last_ingest` and the lock before suspecting the fetch.

@@ -90,10 +90,19 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 				<em><?php esc_html_e( 'Site root for REST sources; full feed URL for RSS.', 'trending-now' ); ?></em>
 			</label>
 
-												<label class="advtn-type-field advtn-wide" data-types="serpapi"<?php echo esc_attr( $for_types( array( 'serpapi' ) ) ); ?>>
+												<label class="advtn-type-field" data-types="serpapi"<?php echo esc_attr( $for_types( array( 'serpapi' ) ) ); ?>>
+				<span><?php esc_html_e( 'Feed', 'trending-now' ); ?></span>
+				<select name="sources[<?php echo esc_attr( (string) $index ); ?>][serp_mode]">
+					<option value="top_stories" <?php selected( (string) ( $source['serp_mode'] ?? 'search' ), 'top_stories' ); ?>><?php esc_html_e( 'Top stories (mainstream front page)', 'trending-now' ); ?></option>
+					<option value="search" <?php selected( (string) ( $source['serp_mode'] ?? 'search' ), 'search' ); ?>><?php esc_html_e( 'Search query', 'trending-now' ); ?></option>
+				</select>
+				<em><?php esc_html_e( 'Top stories returns what Google News leads with for the country and language below — no query needed.', 'trending-now' ); ?></em>
+			</label>
+
+			<label class="advtn-type-field advtn-wide" data-types="serpapi"<?php echo esc_attr( $for_types( array( 'serpapi' ) ) ); ?>>
 				<span><?php esc_html_e( 'Search query', 'trending-now' ); ?></span>
 				<input type="text" name="sources[<?php echo esc_attr( (string) $index ); ?>][serp_query]" value="<?php echo esc_attr( (string) ( $source['serp_query'] ?? '' ) ); ?>" placeholder="sports betting odds" />
-				<em><?php esc_html_e( 'Passed to Google News as-is. Google search operators work, including site:example.com and quoted phrases.', 'trending-now' ); ?></em>
+				<em><?php esc_html_e( 'Only used when Feed is set to Search query. Passed to Google News as-is; operators such as site:example.com and quoted phrases work.', 'trending-now' ); ?></em>
 			</label>
 
 			<label class="advtn-type-field advtn-wide" data-types="serpapi"<?php echo esc_attr( $for_types( array( 'serpapi' ) ) ); ?>>

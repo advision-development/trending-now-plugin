@@ -53,24 +53,26 @@ final class ADVTN_Shortcode {
 		$atts = shortcode_atts(
 			array(
 				'limit'        => '',
-				'layout'       => 'list',
+				'layout'       => '',
 				'heading'      => '',
-				'show_images'  => '0',
-				'show_source'  => '1',
-				'show_date'    => '1',
+				'show_images'  => '',
+				'show_source'  => '',
+				'show_date'    => '',
 				'show_see_all' => '1',
 			),
 			is_array( $atts ) ? $atts : array(),
 			self::TAG
 		);
 
-		$args = array(
-			'layout'       => (string) $atts['layout'],
-			'show_images'  => $atts['show_images'],
-			'show_source'  => $atts['show_source'],
-			'show_date'    => $atts['show_date'],
-			'show_see_all' => $atts['show_see_all'],
-		);
+		$args = array( 'show_see_all' => $atts['show_see_all'] );
+
+		// Anything left at its default falls through to the Settings value
+		// rather than silently overriding it.
+		foreach ( array( 'layout', 'show_images', 'show_source', 'show_date' ) as $key ) {
+			if ( '' !== (string) $atts[ $key ] ) {
+				$args[ $key ] = $atts[ $key ];
+			}
+		}
 
 		// Empty attributes fall through to the configured defaults rather than
 		// creating a distinct cache variant.

@@ -52,29 +52,34 @@ final class ADVTN_Source_SerpAPI extends ADVTN_Source_Base {
 			return ADVTN_Fetch_Result::failure( __( 'No SerpAPI key is configured. Add it under Settings → Security.', 'trending-now' ) );
 		}
 
+		$mode  = 'top_stories' === (string) ( $config['serp_mode'] ?? 'search' ) ? 'top_stories' : 'search';
 		$query = trim( (string) ( $config['serp_query'] ?? '' ) );
+		$topic = trim( (string) ( $config['serp_topic'] ?? '' ) );
 
-		if ( '' === $query ) {
-			return ADVTN_Fetch_Result::failure( __( 'A search query is required for SerpAPI sources.', 'trending-now' ) );
+		if ( 'search' === $mode && '' === $query ) {
+			return ADVTN_Fetch_Result::failure( __( 'A search query is required unless the source is set to Top stories.', 'trending-now' ) );
 		}
 
 		$domains = $this->clean_domains( (array) ( $config['serp_domains'] ?? array() ) );
 
-		$endpoint = add_query_arg(
-			array(
-				'engine'  => 'google_news',
-				'q'       => rawurlencode( $query ),
-				'gl'      => $this->clean_locale( (string) ( $config['serp_country'] ?? 'us' ), 'us' ),
-				'hl'      => $this->clean_locale( (string) ( $config['serp_language'] ?? 'en' ), 'en' ),
-				// No `so` here: SerpAPI rejects it outright alongside `q`
-				// ("`q` and `so` parameters can't be used together"), because
-				// sort order only applies to topic and section browsing.
-				// Ordering does not matter much anyway — the selector re-sorts
-				// by published_at.
-				'api_key' => rawurlencode( $key ),
-			),
-			self::ENDPOINT
+		$params = array(
+			'engine'  => 'google_news',
+			'gl'      => $this->clean_locale( (string) ( $config['serp_country'] ?? 'us' ), 'us' ),
+			'hl'      => $this->clean_locale( (string) ( $config['serp_language'] ?? 'en' ), 'en' ),
+			'api_key' => rawurlencode( $key ),
 		);
+
+		if ( 'search' === $mode ) {
+			// No `so` alongside `q`: SerpAPI rejects the pair outright, because
+			// sort order only applies to topic and section browsing.
+			$params['q'] = rawurlencode( $query );
+		} elseif ( '' !== $topic ) {
+			$params['topic_token'] = rawurlencode( $topic );
+		}
+		// Otherwise: no q, no topic. That is Google News Top Stories — the
+		// mainstream front page for the locale.
+
+		$endpoint = add_query_arg( $params, self::ENDPOINT );
 
 		$res    = $this->http_get( $endpoint );
 		$result = new ADVTN_Fetch_Result();
@@ -209,10 +214,11 @@ final class ADVTN_Source_SerpAPI extends ADVTN_Source_Base {
 	public function validate_config( array $config ) {
 		$clean = $this->base_config( $config );
 
+		$mode  = 'top_stories' === (string) ( $config['serp_mode'] ?? 'search' ) ? 'top_stories' : 'search';
 		$query = trim( (string) ( $config['serp_query'] ?? '' ) );
 
-		if ( '' === $query ) {
-			return new WP_Error( 'advtn_missing_query', __( 'A search query is required for SerpAPI sources.', 'trending-now' ) );
+		if ( 'search' === $mode && '' === $query ) {
+			return new WP_Error( 'advtn_missing_query', __( 'A search query is required unless the source is set to Top stories.', 'trending-now' ) );
 		}
 
 		$raw_domains = $config['serp_domains'] ?? array();
@@ -221,14 +227,18 @@ final class ADVTN_Source_SerpAPI extends ADVTN_Source_Base {
 		}
 
 		$clean['limit']         = max( 1, min( 100, (int) ( $config['limit'] ?? 20 ) ) );
+		$clean['serp_mode']     = $mode;
 		$clean['serp_query']    = sanitize_text_field( $query );
+		$clean['serp_topic']    = (string) preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) ( $config['serp_topic'] ?? '' ) );
 		$clean['serp_domains']  = $this->clean_domains( (array) $raw_domains );
 		$clean['serp_country']  = $this->clean_locale( (string) ( $config['serp_country'] ?? 'us' ), 'us' );
 		$clean['serp_language'] = $this->clean_locale( (string) ( $config['serp_language'] ?? 'en' ), 'en' );
 		$clean['url']           = '';
 
 		if ( '' === $clean['label'] ) {
-			$clean['label'] = __( 'Google News (SerpAPI)', 'trending-now' );
+			$clean['label'] = 'top_stories' === $mode
+				? __( 'Google News — Top stories', 'trending-now' )
+				: __( 'Google News (SerpAPI)', 'trending-now' );
 		}
 
 		return $clean;
