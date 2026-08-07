@@ -12,7 +12,10 @@ guaranteed window of exposure in an internally-linked, server-rendered block.
 The repository root *is* the plugin. `docs/trending-now-plugin-spec.md` is the
 authoritative specification; read it before changing behaviour.
 
-- Targets WordPress 6.4+, PHP 8.1+.
+- Targets WordPress 6.4+, PHP 7.4+ (developed against 8.x; 7.4 is supported for legacy
+  installs). No PHP 8.0+ syntax or functions — notably no `str_contains`,
+  `str_starts_with` or `str_ends_with`. Lint against 7.4 before releasing:
+  `docker run --rm -v "$PWD":/app -w /app php:7.4-cli sh -c 'find . -name "*.php" -not -path "./vendor/*" -exec php -l {} \;'`
 - Prefix for everything (classes, functions, options, hooks, DB table, CSS, REST):
   `advtn` / `ADVTN` / `Advision\TrendingNow`.
 - Text domain: `trending-now`.

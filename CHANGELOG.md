@@ -5,6 +5,24 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **The minimum PHP version is now 7.4**, down from 8.1. Only two things actually
+  required 8.x — two `str_ends_with()` calls, in the release-asset check and the SerpAPI
+  domain allowlist — and both are plain `substr()` comparisons now. Nothing else in the
+  codebase used 8.0+ syntax: typed properties and arrow functions, the two features it
+  leans on hardest, both landed in 7.4.
+
+  Verified by running the plugin on PHP 7.4.33 with current WordPress, not by inspection:
+  activation, schema, a live SerpAPI fetch through both the top-stories and allowlist
+  paths, `wp_rest` against real sources, curated links, selection, all three layouts, the
+  archive, the updater and the page-cache purge — with an empty error log throughout.
+
+  PHP 7.4 has been end-of-life since November 2022. This is for legacy installs, not a
+  recommendation.
+
 ## [1.1.3] — 2026-08-07
 
 ### Added

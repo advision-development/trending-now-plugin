@@ -580,7 +580,10 @@ final class ADVTN_Source_SerpAPI extends ADVTN_Source_Base {
 		}
 
 		foreach ( $domains as $domain ) {
-			if ( $host === $domain || str_ends_with( $host, '.' . $domain ) ) {
+			// substr() rather than str_ends_with(), which is PHP 8.0+.
+			$suffix = '.' . $domain;
+
+			if ( $host === $domain || substr( $host, -strlen( $suffix ) ) === $suffix ) {
 				return true;
 			}
 		}

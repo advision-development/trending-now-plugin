@@ -9,7 +9,7 @@ higher-authority properties.
 
 [![Version](https://img.shields.io/badge/version-1.1.3-blue)](CHANGELOG.md)
 [![WordPress](https://img.shields.io/badge/WordPress-6.4%2B-21759b)](https://wordpress.org)
-[![PHP](https://img.shields.io/badge/PHP-8.1%2B-777bb4)](https://www.php.net)
+[![PHP](https://img.shields.io/badge/PHP-7.4%2B-777bb4)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-GPL--2.0--or--later-green)](LICENSE)
 
 ---
@@ -58,9 +58,13 @@ move it. Check your server logs before assuming otherwise.
 | | |
 |---|---|
 | WordPress | 6.4+ |
-| PHP | 8.1+ |
+| PHP | 7.4+ |
 | MySQL / MariaDB | 5.7+ / 10.3+ |
 | Composer | for Action Scheduler (optional — falls back to WP-Cron) |
+
+PHP 7.4 is supported but end-of-life upstream — it stopped receiving security fixes in
+November 2022. It is here for legacy installs, not as a recommendation. The plugin is
+developed and tested against 8.x.
 
 Loopback HTTP requests must succeed for Action Scheduler's queue runner. The Diagnostics
 tab tests this for you.

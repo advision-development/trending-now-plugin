@@ -5,7 +5,7 @@
  * Description:       Server-rendered "Trending Now" link block aggregated from owned WordPress sites and Google News, plus a paginated archive. Built for crawl discovery.
  * Version:           1.1.3
  * Requires at least: 6.4
- * Requires PHP:      8.1
+ * Requires PHP:      7.4
  * Author:            Advision Development
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html

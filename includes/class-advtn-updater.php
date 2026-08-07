@@ -92,7 +92,7 @@ final class ADVTN_Updater {
 			'url'           => $release['url'],
 			'package'       => $release['package'],
 			'requires'      => '6.4',
-			'requires_php'  => '8.1',
+			'requires_php'  => '7.4',
 			'tested'        => get_bloginfo( 'version' ),
 		);
 	}
@@ -199,7 +199,9 @@ final class ADVTN_Updater {
 
 			$name = (string) ( $asset['name'] ?? '' );
 
-			if ( ! str_ends_with( strtolower( $name ), '.zip' ) ) {
+			// substr() rather than str_ends_with(), which is PHP 8.0+; this
+			// plugin still runs on 7.4 installs.
+			if ( '.zip' !== substr( strtolower( $name ), -4 ) ) {
 				continue;
 			}
 
@@ -330,7 +332,7 @@ final class ADVTN_Updater {
 			'author'        => '<a href="https://github.com/advision-development">Advision Development</a>',
 			'homepage'      => 'https://github.com/' . self::REPO,
 			'requires'      => '6.4',
-			'requires_php'  => '8.1',
+			'requires_php'  => '7.4',
 			'tested'        => get_bloginfo( 'version' ),
 			'last_updated'  => $release['published'],
 			'download_link' => $release['package'],
