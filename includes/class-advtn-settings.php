@@ -56,6 +56,9 @@ final class ADVTN_Settings {
 			'hub_url'                  => '',
 			'hub_secret'               => '',
 			'ingest_secret'            => '',
+			'serpapi_key'              => '',
+			'github_token'             => '',
+			'auto_update'              => true,
 			'delete_data_on_uninstall' => false,
 		);
 	}
@@ -182,6 +185,13 @@ final class ADVTN_Settings {
 
 		$hub_url          = trim( (string) ( $input['hub_url'] ?? '' ) );
 		$out['hub_url']   = '' !== $hub_url ? untrailingslashit( esc_url_raw( $hub_url ) ) : '';
+
+		$out['auto_update'] = ! empty( $input['auto_update'] );
+
+		// Credentials: printable, no whitespace. SerpAPI keys are hex; GitHub
+		// tokens carry underscores and are longer.
+		$out['serpapi_key']  = (string) preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) ( $input['serpapi_key'] ?? '' ) );
+		$out['github_token'] = (string) preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) ( $input['github_token'] ?? '' ) );
 
 		$out['hub_secret']    = preg_replace( '/[^A-Za-z0-9]/', '', (string) ( $input['hub_secret'] ?? '' ) ) ?? '';
 		$out['ingest_secret'] = preg_replace( '/[^A-Za-z0-9]/', '', (string) ( $input['ingest_secret'] ?? '' ) ) ?? '';

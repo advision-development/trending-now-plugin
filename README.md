@@ -99,7 +99,8 @@ If nothing renders, Diagnostics will say why — see [Troubleshooting](#troubles
 |---|---|---|
 | `wp_rest` | Owned WordPress sites | `/wp-json/wp/v2/posts`. Preferred: `/feed/` is capped by the remote site's `posts_per_rss` with no per-request override. |
 | `rss` | Sites with the REST API disabled | SimplePie via `fetch_feed()`, with its 12-hour cache disabled for the call. |
-| `gdelt` | Third-party news | [GDELT DOC 2.0](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/). No API key. Restricted to a domain allowlist. |
+| `gdelt` | Third-party news, free | [GDELT DOC 2.0](https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/). No API key, but slow and aggressively rate limited. |
+| `serpapi` | Third-party news, paid | Google News via [SerpAPI](https://serpapi.com). Needs a key; **one search credit per fetch**. Faster and far better coverage than GDELT. |
 
 Each row has a label, an item limit per cycle, an enabled toggle, and drag-to-reorder
 (order sets the ingest stagger). GDELT rows additionally take a query, an allowed-domain
@@ -109,8 +110,12 @@ The tab exports the whole list as JSON and imports it back — merging on source
 replacing outright — so a source set can be moved between installs. Imported rows are
 validated exactly as though typed into the form; bad rows are reported and skipped.
 
-> **GDELT is slow.** It routinely takes 10s+ to answer and rate-limits with `429`. The
-> default `http_timeout` of 5 seconds cannot reach it. Raise it if you use a GDELT source.
+Both news providers accept an optional domain allowlist, applied after the response.
+
+> **Choosing between them.** GDELT is free but routinely takes 10–20s and rate-limits at
+> roughly one request per five seconds. SerpAPI is quick and predictable but bills a
+> search credit per fetch — one source on a daily cycle is about 30 credits a month.
+> Whichever you use, set `http_timeout` to 30.
 
 ## Displaying the widget
 
@@ -367,6 +372,9 @@ crawled most often — that is where this earns its keep.
 | `class_prefix` | `advtn` | Vary per site |
 | `hub_url` / `hub_secret` | — | Hub and spoke modes |
 | `ingest_secret` | generated | Signs `/ingest` and `/status` |
+| `serpapi_key` | — | Required by SerpAPI sources |
+| `github_token` | — | Only needed if the plugin repo is private |
+| `auto_update` | `true` | Offer updates from GitHub releases |
 | `delete_data_on_uninstall` | `false` | |
 
 `link_rel_external` applies **only** to GDELT items. Internal network links stay plain
@@ -384,6 +392,35 @@ followed links — that is the entire point of the plugin.
 
 A new source type implements `ADVTN_Source_Interface` — extend `ADVTN_Source_Base` — and
 registers through `advtn_source_map`.
+
+## Updating
+
+The plugin carries an `Update URI` header pointing at its GitHub repository, so
+WordPress routes update checks here instead of to wordpress.org — which also removes any
+risk of an unrelated plugin with the same slug being installed over it.
+
+New releases appear on the Plugins screen like any other update, and WordPress's own
+per-plugin auto-update toggle works normally. **Diagnostics → Check for updates** forces
+an immediate check; results are cached for six hours otherwise.
+
+The updater prefers the `.zip` asset attached to the release, because it unpacks to a
+clean `trending-now/` directory with `vendor/` bundled. It falls back to GitHub's
+generated zipball, which unpacks to `owner-repo-<sha>/` and is renamed on the way in.
+
+If the repository is private, set a **GitHub token** under Settings → Security: a
+fine-grained personal access token with read-only Contents access. Without it the check
+reports "no release found". The token is only ever sent to `api.github.com` — never to
+the release CDN, which rejects it anyway.
+
+### Cutting a release
+
+```bash
+# bump Version: and ADVTN_VERSION in trending-now.php, add a CHANGELOG entry
+git tag -a v1.0.1 -m "Trending Now 1.0.1" && git push origin v1.0.1
+gh release create v1.0.1 trending-now-1.0.1.zip --title "Trending Now 1.0.1" --notes-file -
+```
+
+The tag may be `v1.0.1` or `1.0.1`; the leading `v` is stripped before comparison.
 
 ## Development
 
@@ -471,6 +508,11 @@ ignores backoff and retries immediately.
 **`401` from the REST API.** Clock skew over 300 seconds, a replayed signature, or the
 message was built wrong — it is `timestamp + "\n" + raw body`, with an *empty* body for
 GET.
+
+**SerpAPI says the account is out of searches.** That is credit exhaustion, not a
+transient error — it will not clear on its own. Top up or upgrade at serpapi.com, or
+disable the source. **Diagnostics → Check SerpAPI credits** shows the remaining balance
+without spending one.
 
 **Action Scheduler shows nothing pending and nothing runs.** Check the loopback test. HTTP
 auth, an aggressive WAF or firewalled self-requests all break it, and its queue runner

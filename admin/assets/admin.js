@@ -26,13 +26,13 @@
 			return;
 		}
 
-		var isGdelt = select.value === 'gdelt';
+		var type = select.value;
 
-		row.querySelectorAll( '.advtn-field-gdelt' ).forEach( function ( el ) {
-			el.hidden = ! isGdelt;
-		} );
-		row.querySelectorAll( '.advtn-field-url' ).forEach( function ( el ) {
-			el.hidden = isGdelt;
+		// Each field declares the types it belongs to, so adding a source type
+		// is a markup change rather than another branch here.
+		row.querySelectorAll( '.advtn-type-field' ).forEach( function ( el ) {
+			var types = ( el.dataset.types || '' ).split( /\s+/ );
+			el.hidden = types.indexOf( type ) === -1;
 		} );
 	}
 

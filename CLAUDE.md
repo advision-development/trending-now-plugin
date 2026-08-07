@@ -144,7 +144,15 @@ pageview, requiring WP-CLI.
   `ABSPATH` guard.
 - Prefer adding a source type over branching inside an existing one — implement
   `ADVTN_Source_Interface` (extend `ADVTN_Source_Base`) and register it via the
-  `advtn_source_map` filter.
+  `advtn_source_map` filter. If it is a news provider, add it to
+  `ADVTN_Source_Base::news_types()`; that one list drives the news/network slot split,
+  the `rel` attribute and the `--news` template modifier. Admin fields declare
+  `data-types="..."` and are shown server-side and by `applyType()` in admin.js — no new
+  branches needed.
+- Credentials live in `advtn_settings`, not in source rows, and must be redacted before
+  going anywhere near an error message or the log. `ADVTN_Logger` scrubs keys containing
+  secret/signature/token/password/api_key, but a key embedded in a URL inside a message
+  body will not be caught — redact explicitly, as the SerpAPI provider does.
 - Selection is deterministic. There is no score column and no relevance model; if you
   find yourself adding one, re-read spec §7.
 - The per-source cap is a *preference*, not a hard limit. `ADVTN_Selector::build()` makes
@@ -155,6 +163,10 @@ pageview, requiring WP-CLI.
   `ADVTN_Selector::forget()` and purge the render cache. Do **not** call
   `build_and_commit()` to tidy up — it stamps `times_shown`, so housekeeping would
   inflate every counter.
+- Updates go through `ADVTN_Updater`, hooked on `update_plugins_github.com`, which
+  WordPress derives from the `Update URI` header. Removing that header hands the slug
+  back to wordpress.org. The GitHub token is only ever sent to `api.github.com` — the
+  release CDN redirect rejects it, and sending it further would leak it.
 - Nothing an ingest writes is visible until `finalize()` runs: it is what commits the
   selection and busts the render cache. When debugging "my items are not showing", check
   `advtn_last_ingest` and the lock before suspecting the fetch.

@@ -48,6 +48,10 @@ $advtn_badge = static function ( bool $value ): string {
 	<button type="submit" class="button" name="advtn_do" value="rebuild_selection"><?php esc_html_e( 'Rebuild selection', 'trending-now' ); ?></button>
 	<button type="submit" class="button" name="advtn_do" value="purge_cache"><?php esc_html_e( 'Purge render cache', 'trending-now' ); ?></button>
 	<button type="submit" class="button" name="advtn_do" value="test_loopback"><?php esc_html_e( 'Test loopback', 'trending-now' ); ?></button>
+	<button type="submit" class="button" name="advtn_do" value="check_updates"><?php esc_html_e( 'Check for updates', 'trending-now' ); ?></button>
+	<?php if ( '' !== $settings->get_string( 'serpapi_key' ) ) : ?>
+		<button type="submit" class="button" name="advtn_do" value="check_serpapi"><?php esc_html_e( 'Check SerpAPI credits', 'trending-now' ); ?></button>
+	<?php endif; ?>
 	<button type="submit" class="button advtn-confirm" name="advtn_do" value="release_lock"><?php esc_html_e( 'Release lock', 'trending-now' ); ?></button>
 	<button type="submit" class="button advtn-confirm" name="advtn_do" value="clear_log"><?php esc_html_e( 'Clear log', 'trending-now' ); ?></button>
 </form>
@@ -81,6 +85,63 @@ $advtn_badge = static function ( bool $value ): string {
 			</td>
 		</tr>
 		<tr><th><?php esc_html_e( 'Versions', 'trending-now' ); ?></th><td><?php echo esc_html( sprintf( 'plugin %s / db %s', (string) $advtn_status['plugin_version'], (string) $advtn_status['db_version'] ) ); ?></td></tr>
+		<tr>
+			<th><?php esc_html_e( 'Latest release', 'trending-now' ); ?></th>
+			<td>
+				<?php
+				if ( ! $settings->get_bool( 'auto_update' ) ) {
+					esc_html_e( 'Update checks are disabled.', 'trending-now' );
+				} else {
+					$advtn_release = advtn()->updater()->latest_release();
+
+					if ( is_wp_error( $advtn_release ) ) {
+						echo '<span class="advtn-badge advtn-badge--bad">' . esc_html__( 'unavailable', 'trending-now' ) . '</span> ';
+						echo esc_html( $advtn_release->get_error_message() );
+					} elseif ( version_compare( $advtn_release['version'], ADVTN_VERSION, '>' ) ) {
+						printf(
+							'<span class="advtn-badge advtn-badge--bad">%s</span> <a href="%s" target="_blank" rel="noopener">%s</a>',
+							esc_html__( 'update available', 'trending-now' ),
+							esc_url( $advtn_release['url'] ),
+							esc_html( $advtn_release['version'] )
+						);
+					} else {
+						echo '<span class="advtn-badge advtn-badge--ok">' . esc_html__( 'up to date', 'trending-now' ) . '</span> ';
+						echo esc_html( $advtn_release['version'] );
+					}
+				}
+				?>
+			</td>
+		</tr>
+		<?php if ( '' !== $settings->get_string( 'serpapi_key' ) ) : ?>
+			<tr>
+				<th><?php esc_html_e( 'SerpAPI credits', 'trending-now' ); ?></th>
+				<td>
+					<?php
+					$advtn_account = get_transient( ADVTN_Source_SerpAPI::ACCOUNT_TRANSIENT );
+
+					if ( ! is_array( $advtn_account ) ) {
+						esc_html_e( 'Not checked yet — use "Check SerpAPI credits" above.', 'trending-now' );
+					} else {
+						$advtn_left = $advtn_account['searches_left'];
+						printf(
+							'<span class="advtn-badge advtn-badge--%1$s">%2$s</span> %3$s',
+							esc_attr( ( null !== $advtn_left && $advtn_left <= 0 ) ? 'bad' : 'ok' ),
+							esc_html( null === $advtn_left ? '?' : (string) $advtn_left ),
+							esc_html(
+								sprintf(
+									/* translators: 1: plan name, 2: usage this month, 3: check time. */
+									__( 'searches left on "%1$s" · %2$s used this month · checked %3$s UTC', 'trending-now' ),
+									(string) $advtn_account['plan'],
+									null === $advtn_account['this_month_usage'] ? '?' : (string) $advtn_account['this_month_usage'],
+									(string) $advtn_account['checked_at']
+								)
+							)
+						);
+					}
+					?>
+				</td>
+			</tr>
+		<?php endif; ?>
 	</tbody>
 </table>
 

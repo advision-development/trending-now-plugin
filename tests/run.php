@@ -132,6 +132,70 @@ advtn_assert_same(
 	'hmac: different secrets diverge'
 );
 
+/* -------------------------------------------------------------------------
+ * SerpAPI error classification
+ *
+ * The credit-exhaustion branch is the one thing that cannot be rehearsed
+ * against a live key, so the mapping is pinned here instead.
+ * ---------------------------------------------------------------------- */
+
+$advtn_error_cases = array(
+	array( 'Your account has run out of searches.', 'credits' ),
+	array( 'Your account ran out of searches', 'credits' ),
+	array( 'You have no searches left this month.', 'credits' ),
+	array( 'Account is out of credits', 'credits' ),
+	array( 'You have exceeded your monthly searches limit. Please upgrade your plan.', 'credits' ),
+	array( "You've exceeded your searches per hour rate limit.", 'rate_limit' ),
+	array( 'Too many requests, please slow down.', 'rate_limit' ),
+	array( 'Invalid API key. Your API key should be here: https://serpapi.com/manage-api-key', 'auth' ),
+	array( 'Missing API key', 'auth' ),
+	array( "Google hasn't returned any results for this query.", 'no_results' ),
+	array( 'Something else entirely went wrong', 'other' ),
+	array( '', 'other' ),
+);
+
+foreach ( $advtn_error_cases as $advtn_case ) {
+	advtn_assert_same(
+		$advtn_case[1],
+		ADVTN_Source_SerpAPI::classify_error( $advtn_case[0] ),
+		'serpapi classify: ' . ( '' === $advtn_case[0] ? '(empty)' : mb_substr( $advtn_case[0], 0, 44 ) )
+	);
+}
+
+// Credit exhaustion must never be mistaken for a transient rate limit: one
+// needs a human to top up, the other clears itself.
+advtn_assert_same(
+	true,
+	'credits' !== ADVTN_Source_SerpAPI::classify_error( "You've exceeded your searches per hour rate limit." ),
+	'serpapi classify: hourly rate limit is not credit exhaustion'
+);
+
+/* -------------------------------------------------------------------------
+ * SerpAPI date parsing
+ * ---------------------------------------------------------------------- */
+
+$advtn_date_cases = array(
+	array( '08/06/2026, 07:00 AM, +0000 UTC', '2026-08-06 07:00:00', 'Google News format' ),
+	array( '08/06/2026, 07:00 PM, +0000 UTC', '2026-08-06 19:00:00', 'afternoon' ),
+	array( '12/31/2025, 11:59 PM, +0000 UTC', '2025-12-31 23:59:00', 'year boundary' ),
+	array( '2026-08-06T07:00:00Z', '2026-08-06 07:00:00', 'ISO 8601 fallback' ),
+	array( '', '', 'empty' ),
+	array( 'not a date at all', '', 'garbage' ),
+);
+
+foreach ( $advtn_date_cases as $advtn_case ) {
+	advtn_assert_same( $advtn_case[1], ADVTN_Source_SerpAPI::parse_date( $advtn_case[0] ), 'serpapi date: ' . $advtn_case[2] );
+}
+
+/* -------------------------------------------------------------------------
+ * News source types
+ * ---------------------------------------------------------------------- */
+
+advtn_assert_same( true, ADVTN_Source_Base::is_news_type( 'gdelt' ), 'news types: gdelt' );
+advtn_assert_same( true, ADVTN_Source_Base::is_news_type( 'serpapi' ), 'news types: serpapi' );
+advtn_assert_same( false, ADVTN_Source_Base::is_news_type( 'wp_rest' ), 'news types: wp_rest is network' );
+advtn_assert_same( false, ADVTN_Source_Base::is_news_type( 'rss' ), 'news types: rss is network' );
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );

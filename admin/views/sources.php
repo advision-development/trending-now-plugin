@@ -34,8 +34,7 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 	$domains = (array) ( $source['gdelt_domains'] ?? array() );
 
 	// Mirrors applyType() in admin.js so the wrong fields never flash on load.
-	$hide_gdelt = 'gdelt' === $type ? '' : ' hidden';
-	$hide_url   = 'gdelt' === $type ? ' hidden' : '';
+	$for_types = static fn( array $types ): string => in_array( $type, $types, true ) ? '' : ' hidden';
 	?>
 	<div class="advtn-source" draggable="true" data-index="<?php echo esc_attr( (string) $index ); ?>">
 		<div class="advtn-source__bar">
@@ -73,6 +72,7 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 					<option value="wp_rest" <?php selected( $type, 'wp_rest' ); ?>><?php esc_html_e( 'WordPress REST API', 'trending-now' ); ?></option>
 					<option value="rss" <?php selected( $type, 'rss' ); ?>><?php esc_html_e( 'RSS / Atom feed', 'trending-now' ); ?></option>
 					<option value="gdelt" <?php selected( $type, 'gdelt' ); ?>><?php esc_html_e( 'GDELT news', 'trending-now' ); ?></option>
+					<option value="serpapi" <?php selected( $type, 'serpapi' ); ?>><?php esc_html_e( 'Google News (SerpAPI)', 'trending-now' ); ?></option>
 				</select>
 			</label>
 
@@ -86,24 +86,24 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 				<span><?php esc_html_e( 'Enabled', 'trending-now' ); ?></span>
 			</label>
 
-			<label class="advtn-field-url advtn-wide"<?php echo esc_attr( $hide_url ); ?>>
+			<label class="advtn-type-field advtn-wide" data-types="wp_rest rss"<?php echo esc_attr( $for_types( array( 'wp_rest', 'rss' ) ) ); ?>>
 				<span><?php esc_html_e( 'URL', 'trending-now' ); ?></span>
 				<input type="url" name="sources[<?php echo esc_attr( (string) $index ); ?>][url]" value="<?php echo esc_attr( (string) ( $source['url'] ?? '' ) ); ?>" placeholder="https://example.com" />
 				<em><?php esc_html_e( 'Site root for REST sources; full feed URL for RSS.', 'trending-now' ); ?></em>
 			</label>
 
-			<label class="advtn-field-gdelt advtn-wide"<?php echo esc_attr( $hide_gdelt ); ?>>
+			<label class="advtn-type-field advtn-wide" data-types="gdelt"<?php echo esc_attr( $for_types( array( 'gdelt' ) ) ); ?>>
 				<span><?php esc_html_e( 'GDELT query', 'trending-now' ); ?></span>
 				<input type="text" name="sources[<?php echo esc_attr( (string) $index ); ?>][gdelt_query]" value="<?php echo esc_attr( (string) ( $source['gdelt_query'] ?? '' ) ); ?>" placeholder='sourcelang:english (sportsbook OR "betting odds")' />
 			</label>
 
-			<label class="advtn-field-gdelt advtn-wide"<?php echo esc_attr( $hide_gdelt ); ?>>
+			<label class="advtn-type-field advtn-wide" data-types="gdelt"<?php echo esc_attr( $for_types( array( 'gdelt' ) ) ); ?>>
 				<span><?php esc_html_e( 'Allowed domains', 'trending-now' ); ?></span>
 				<input type="text" name="sources[<?php echo esc_attr( (string) $index ); ?>][gdelt_domains]" value="<?php echo esc_attr( implode( ', ', array_map( 'strval', $domains ) ) ); ?>" placeholder="espn.com, cbssports.com, si.com" />
 				<em><?php esc_html_e( 'Comma separated. Enforced again after the response, because the query language is fuzzy.', 'trending-now' ); ?></em>
 			</label>
 
-			<label class="advtn-field-gdelt advtn-wide"<?php echo esc_attr( $hide_gdelt ); ?>>
+			<label class="advtn-type-field advtn-wide" data-types="gdelt"<?php echo esc_attr( $for_types( array( 'gdelt' ) ) ); ?>>
 				<span><?php esc_html_e( 'Timespan', 'trending-now' ); ?></span>
 				<input type="text" name="sources[<?php echo esc_attr( (string) $index ); ?>][gdelt_timespan]" value="<?php echo esc_attr( (string) ( $source['gdelt_timespan'] ?? '2d' ) ); ?>" placeholder="2d" />
 				<em>
@@ -113,6 +113,38 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 					esc_html_e( 'It is a rolling window, not a schedule: every run re-queries the whole window, and articles already stored are matched by URL rather than duplicated. Keep it a little wider than your ingest interval so nothing slips through a missed cycle — with the default 20-hour interval, 2d is a sensible floor. Widening it mostly costs freshness, since "Items per cycle" still caps how many come back and the newest are returned first.', 'trending-now' );
 					?>
 				</em>
+			</label>
+
+			<label class="advtn-type-field advtn-wide" data-types="serpapi"<?php echo esc_attr( $for_types( array( 'serpapi' ) ) ); ?>>
+				<span><?php esc_html_e( 'Search query', 'trending-now' ); ?></span>
+				<input type="text" name="sources[<?php echo esc_attr( (string) $index ); ?>][serp_query]" value="<?php echo esc_attr( (string) ( $source['serp_query'] ?? '' ) ); ?>" placeholder="sports betting odds" />
+				<em><?php esc_html_e( 'Passed to Google News as-is. Google search operators work, including site:example.com and quoted phrases.', 'trending-now' ); ?></em>
+			</label>
+
+			<label class="advtn-type-field advtn-wide" data-types="serpapi"<?php echo esc_attr( $for_types( array( 'serpapi' ) ) ); ?>>
+				<span><?php esc_html_e( 'Allowed domains', 'trending-now' ); ?></span>
+				<input type="text" name="sources[<?php echo esc_attr( (string) $index ); ?>][serp_domains]" value="<?php echo esc_attr( implode( ', ', array_map( 'strval', (array) ( $source['serp_domains'] ?? array() ) ) ) ); ?>" placeholder="espn.com, reuters.com" />
+				<em><?php esc_html_e( 'Optional. Leave empty to accept whatever Google News returns; otherwise results are filtered to these hosts after the response.', 'trending-now' ); ?></em>
+			</label>
+
+			<label class="advtn-type-field" data-types="serpapi"<?php echo esc_attr( $for_types( array( 'serpapi' ) ) ); ?>>
+				<span><?php esc_html_e( 'Country', 'trending-now' ); ?></span>
+				<input type="text" name="sources[<?php echo esc_attr( (string) $index ); ?>][serp_country]" value="<?php echo esc_attr( (string) ( $source['serp_country'] ?? 'us' ) ); ?>" placeholder="us" />
+				<em><?php esc_html_e( 'Two-letter code, e.g. us, gb, au.', 'trending-now' ); ?></em>
+			</label>
+
+			<label class="advtn-type-field" data-types="serpapi"<?php echo esc_attr( $for_types( array( 'serpapi' ) ) ); ?>>
+				<span><?php esc_html_e( 'Language', 'trending-now' ); ?></span>
+				<input type="text" name="sources[<?php echo esc_attr( (string) $index ); ?>][serp_language]" value="<?php echo esc_attr( (string) ( $source['serp_language'] ?? 'en' ) ); ?>" placeholder="en" />
+			</label>
+
+			<label class="advtn-type-field" data-types="serpapi"<?php echo esc_attr( $for_types( array( 'serpapi' ) ) ); ?>>
+				<span><?php esc_html_e( 'Sort by', 'trending-now' ); ?></span>
+				<select name="sources[<?php echo esc_attr( (string) $index ); ?>][serp_sort]">
+					<option value="1" <?php selected( (string) ( $source['serp_sort'] ?? '1' ), '1' ); ?>><?php esc_html_e( 'Date (newest first)', 'trending-now' ); ?></option>
+					<option value="0" <?php selected( (string) ( $source['serp_sort'] ?? '1' ), '0' ); ?>><?php esc_html_e( 'Relevance', 'trending-now' ); ?></option>
+				</select>
+				<em><?php esc_html_e( 'Each fetch costs one SerpAPI search credit.', 'trending-now' ); ?></em>
 			</label>
 		</div>
 

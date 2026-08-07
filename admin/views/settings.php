@@ -231,6 +231,31 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 			</td>
 		</tr>
 		<tr>
+			<th scope="row"><label for="advtn-serpapi-key"><?php esc_html_e( 'SerpAPI key', 'trending-now' ); ?></label></th>
+			<td>
+				<input type="password" class="large-text code" id="advtn-serpapi-key" name="advtn[serpapi_key]" value="<?php echo esc_attr( (string) $advtn_s['serpapi_key'] ); ?>" autocomplete="off" />
+				<p class="description">
+					<?php esc_html_e( 'Required by "Google News (SerpAPI)" sources. Each fetch spends one search credit, so one source on a daily cycle costs about 30 a month. Get a key at serpapi.com.', 'trending-now' ); ?>
+				</p>
+			</td>
+		</tr>
+		<tr>
+			<th scope="row"><label for="advtn-github-token"><?php esc_html_e( 'GitHub token', 'trending-now' ); ?></label></th>
+			<td>
+				<input type="password" class="large-text code" id="advtn-github-token" name="advtn[github_token]" value="<?php echo esc_attr( (string) $advtn_s['github_token'] ); ?>" autocomplete="off" />
+				<p class="description">
+					<?php esc_html_e( 'Only needed because the plugin repository is private. A fine-grained personal access token with read-only Contents access is enough. Without it, update checks return "no release found".', 'trending-now' ); ?>
+				</p>
+			</td>
+		</tr>
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Updates', 'trending-now' ); ?></th>
+			<td>
+				<label><input type="checkbox" name="advtn[auto_update]" value="1" <?php checked( ! empty( $advtn_s['auto_update'] ) ); ?> /> <?php esc_html_e( 'Offer updates from GitHub releases', 'trending-now' ); ?></label>
+				<p class="description"><?php esc_html_e( 'Surfaces new releases on the Plugins screen like any other update. WordPress still asks before installing unless you enable its own auto-update toggle for this plugin.', 'trending-now' ); ?></p>
+			</td>
+		</tr>
+		<tr>
 			<th scope="row"><?php esc_html_e( 'Uninstall', 'trending-now' ); ?></th>
 			<td><label><input type="checkbox" name="advtn[delete_data_on_uninstall]" value="1" <?php checked( ! empty( $advtn_s['delete_data_on_uninstall'] ) ); ?> /> <?php esc_html_e( 'Drop the items table and every advtn_* option on uninstall', 'trending-now' ); ?></label></td>
 		</tr>

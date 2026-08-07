@@ -7,6 +7,27 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Google News source via SerpAPI** (`serpapi`), alongside the existing GDELT provider:
+  query, optional domain allowlist, country, language and sort order, with the key held
+  once in settings rather than per source. Grouped topic results are flattened, and the
+  publisher name comes from the result rather than being inferred from the host.
+- **Credit exhaustion is handled as its own failure.** SerpAPI reports it as a plain
+  message that reads much like a rate limit, but one needs a human to top up and the
+  other clears itself, so they are classified separately and worded differently.
+  Diagnostics shows the remaining balance, checked on demand so viewing the panel never
+  spends a credit.
+- **Self-update from GitHub releases.** The plugin declares an `Update URI`, so
+  WordPress routes update checks to the repository instead of wordpress.org — which also
+  prevents an unrelated plugin sharing the slug from being installed over it. Prefers the
+  attached release zip, falls back to the generated zipball with the directory renamed,
+  and supports a token for private repositories. Verified end to end: a 0.9.0 install
+  updated itself to the published 1.0.0.
+- `advtn_news_source_types` filter. Which source types count as news now lives in one
+  place and drives the news/network slot split, the `rel` attribute on external links and
+  the `--news` template modifier — previously all three hardcoded `gdelt`.
+
 ### Fixed
 
 - **GDELT requests failed at 10 seconds regardless of `http_timeout`.** WordPress passes

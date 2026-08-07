@@ -67,6 +67,7 @@ final class ADVTN_Plugin {
 		add_action( 'rest_api_init', array( $this->rest(), 'register_routes' ) );
 
 		$this->scheduler()->register_hooks();
+		$this->updater()->register_hooks();
 		$this->archive()->register_hooks();
 		$this->shortcode()->register_hooks();
 		$this->block()->register_hooks();
@@ -194,6 +195,15 @@ final class ADVTN_Plugin {
 	}
 
 	/**
+	 * GitHub release updater.
+	 *
+	 * @return ADVTN_Updater
+	 */
+	public function updater(): ADVTN_Updater {
+		return $this->service( 'updater', fn() => new ADVTN_Updater( $this->settings() ) );
+	}
+
+	/**
 	 * Admin controller.
 	 *
 	 * @return ADVTN_Admin
@@ -213,6 +223,7 @@ final class ADVTN_Plugin {
 			'wp_rest' => 'ADVTN_Source_WP_REST',
 			'rss'     => 'ADVTN_Source_RSS',
 			'gdelt'   => 'ADVTN_Source_GDELT',
+			'serpapi' => 'ADVTN_Source_SerpAPI',
 			'hub'     => 'ADVTN_Source_Hub',
 		);
 

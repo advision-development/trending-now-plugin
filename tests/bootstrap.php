@@ -67,5 +67,48 @@ if ( ! function_exists( 'home_url' ) ) {
 	}
 }
 
+if ( ! function_exists( 'apply_filters' ) ) {
+	/**
+	 * Stub of apply_filters(): no filters registered in this harness.
+	 *
+	 * @param string $tag   Filter name.
+	 * @param mixed  $value Value to filter.
+	 * @return mixed
+	 */
+	function apply_filters( string $tag, $value ) {
+		return $value;
+	}
+}
+
+if ( ! function_exists( 'wp_strip_all_tags' ) ) {
+	/**
+	 * Stub of wp_strip_all_tags().
+	 *
+	 * @param string $text     Input.
+	 * @param bool   $remove_breaks Collapse whitespace.
+	 * @return string
+	 */
+	function wp_strip_all_tags( string $text, bool $remove_breaks = false ): string {
+		$text = strip_tags( $text );
+		return $remove_breaks ? trim( (string) preg_replace( '/[\r\n\t ]+/', ' ', $text ) ) : trim( $text );
+	}
+}
+
+if ( ! function_exists( '__' ) ) {
+	/**
+	 * Stub of __().
+	 *
+	 * @param string $text   Text.
+	 * @param string $domain Text domain.
+	 * @return string
+	 */
+	function __( string $text, string $domain = 'default' ): string {
+		return $text;
+	}
+}
+
 require_once dirname( __DIR__ ) . '/includes/class-advtn-url.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-hmac.php';
+require_once dirname( __DIR__ ) . '/includes/sources/interface-advtn-source.php';
+require_once dirname( __DIR__ ) . '/includes/sources/class-advtn-source-base.php';
+require_once dirname( __DIR__ ) . '/includes/sources/class-advtn-source-serpapi.php';

@@ -358,12 +358,12 @@ final class ADVTN_Repository {
 		$where  = array( 'status = %s' );
 		$params = array( 'active' );
 
-		if ( 'news' === $pool ) {
-			$where[]  = 'source_type = %s';
-			$params[] = 'gdelt';
-		} elseif ( 'network' === $pool ) {
-			$where[]  = 'source_type <> %s';
-			$params[] = 'gdelt';
+		$news_types = ADVTN_Source_Base::news_types();
+
+		if ( ! empty( $news_types ) && in_array( $pool, array( 'news', 'network' ), true ) ) {
+			$slots    = implode( ',', array_fill( 0, count( $news_types ), '%s' ) );
+			$where[]  = ( 'news' === $pool ? 'source_type IN (' : 'source_type NOT IN (' ) . $slots . ')';
+			$params   = array_merge( $params, $news_types );
 		}
 
 		switch ( $tier ) {

@@ -17,6 +17,34 @@ abstract class ADVTN_Source_Base implements ADVTN_Source_Interface {
 	public const USER_AGENT = 'AdvisionTrendingNow/1.0';
 
 	/**
+	 * Source types that count as third-party news rather than network links.
+	 *
+	 * Drives the news/network slot split, the `rel` attribute on external
+	 * links and the `--news` modifier in the templates. Kept in one place so
+	 * adding a news provider does not mean hunting for hardcoded 'gdelt'.
+	 *
+	 * @return string[]
+	 */
+	public static function news_types(): array {
+		/**
+		 * Filters which source types are treated as news.
+		 *
+		 * @param string[] $types Source type keys.
+		 */
+		return (array) apply_filters( 'advtn_news_source_types', array( 'gdelt', 'serpapi' ) );
+	}
+
+	/**
+	 * Whether a source type is third-party news.
+	 *
+	 * @param string $type Source type key.
+	 * @return bool
+	 */
+	public static function is_news_type( string $type ): bool {
+		return in_array( $type, self::news_types(), true );
+	}
+
+	/**
 	 * Settings service.
 	 *
 	 * @var ADVTN_Settings

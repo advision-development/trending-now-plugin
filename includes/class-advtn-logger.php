@@ -103,7 +103,7 @@ final class ADVTN_Logger {
 		foreach ( $context as $key => $value ) {
 			$lower = strtolower( (string) $key );
 
-			if ( false !== strpos( $lower, 'secret' ) || false !== strpos( $lower, 'signature' ) || false !== strpos( $lower, 'token' ) || false !== strpos( $lower, 'password' ) ) {
+			if ( false !== strpos( $lower, 'secret' ) || false !== strpos( $lower, 'signature' ) || false !== strpos( $lower, 'token' ) || false !== strpos( $lower, 'password' ) || false !== strpos( $lower, 'api_key' ) || false !== strpos( $lower, 'apikey' ) ) {
 				$out[ $key ] = '[redacted]';
 				continue;
 			}

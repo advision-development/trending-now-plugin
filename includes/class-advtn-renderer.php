@@ -185,7 +185,7 @@ final class ADVTN_Renderer {
 		$attrs = array();
 		$rel   = array();
 
-		if ( 'gdelt' === ( $item['source_type'] ?? '' ) ) {
+		if ( ADVTN_Source_Base::is_news_type( (string) ( $item['source_type'] ?? '' ) ) ) {
 			$configured = $this->settings->get_string( 'link_rel_external' );
 			if ( '' !== $configured ) {
 				$rel[] = $configured;

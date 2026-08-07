@@ -51,7 +51,7 @@ $advtn_archive->render_header();
 		<ul class="<?php echo esc_attr( $advtn_prefix ); ?>-archive__items">
 			<?php
 			foreach ( $advtn_items as $advtn_item ) :
-				$advtn_is_news = 'gdelt' === ( $advtn_item['source_type'] ?? '' );
+				$advtn_is_news = ADVTN_Source_Base::is_news_type( (string) ( $advtn_item['source_type'] ?? '' ) );
 				$advtn_date    = $advtn_renderer->item_date( $advtn_item );
 				?>
 				<li class="<?php echo esc_attr( $advtn_prefix ); ?>-archive__item <?php echo esc_attr( $advtn_prefix ); ?>-archive__item--<?php echo $advtn_is_news ? 'news' : 'network'; ?>">

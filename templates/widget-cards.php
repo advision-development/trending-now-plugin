@@ -30,7 +30,7 @@ $p = $prefix;
 	<ul class="<?php echo esc_attr( $p ); ?>__items">
 		<?php
 		foreach ( $items as $item ) :
-			$is_news = 'gdelt' === ( $item['source_type'] ?? '' );
+			$is_news = ADVTN_Source_Base::is_news_type( (string) ( $item['source_type'] ?? '' ) );
 			$date    = $args['show_date'] ? $renderer->item_date( $item ) : null;
 			?>
 			<li class="<?php echo esc_attr( $p ); ?>__item <?php echo esc_attr( $p ); ?>__item--<?php echo $is_news ? 'news' : 'network'; ?>">

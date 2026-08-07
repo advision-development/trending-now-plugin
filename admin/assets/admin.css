@@ -115,6 +115,7 @@
    type-specific and mode-specific fields need this to actually disappear. */
 .advtn-admin [hidden],
 .advtn-source__grid label[hidden],
+.advtn-source__grid .advtn-type-field[hidden],
 .advtn-source__grid .advtn-check[hidden] {
 	display: none !important;
 }

@@ -189,7 +189,7 @@ final class ADVTN_Admin {
 		// An unchecked checkbox posts nothing, and update() merges over the
 		// current values — so absence has to be made explicit or a box can
 		// never be turned back off.
-		foreach ( array( 'archive_noindex', 'archive_enabled', 'link_target_blank', 'delete_data_on_uninstall' ) as $flag ) {
+		foreach ( array( 'archive_noindex', 'archive_enabled', 'link_target_blank', 'delete_data_on_uninstall', 'auto_update' ) as $flag ) {
 			$raw[ $flag ] = ! empty( $raw[ $flag ] );
 		}
 
@@ -603,6 +603,57 @@ final class ADVTN_Admin {
 				ADVTN_Logger::log( 'warning', 'All items deleted from the admin.', array( 'rows' => $total ) );
 
 				$notice = 'items_deleted';
+				break;
+
+			case 'check_serpapi':
+				$account = advtn()->source( 'serpapi' )->account( true );
+
+				if ( is_wp_error( $account ) ) {
+					set_transient( 'advtn_admin_errors', array( $account->get_error_message() ), 60 );
+					$notice = 'done';
+					break;
+				}
+
+				set_transient(
+					'advtn_admin_summary',
+					sprintf(
+						/* translators: 1: plan name, 2: searches remaining, 3: usage this month. */
+						__( 'SerpAPI plan "%1$s": %2$s search(es) left, %3$s used this month.', 'trending-now' ),
+						$account['plan'],
+						null === $account['searches_left'] ? '?' : (string) $account['searches_left'],
+						null === $account['this_month_usage'] ? '?' : (string) $account['this_month_usage']
+					),
+					60
+				);
+				$notice = 'done';
+				break;
+
+			case 'check_updates':
+				$release = advtn()->updater()->force_check();
+
+				if ( is_wp_error( $release ) ) {
+					set_transient( 'advtn_admin_errors', array( $release->get_error_message() ), 60 );
+					$notice = 'done';
+					break;
+				}
+
+				set_transient(
+					'advtn_admin_summary',
+					version_compare( $release['version'], ADVTN_VERSION, '>' )
+						? sprintf(
+							/* translators: 1: available version, 2: installed version. */
+							__( 'Version %1$s is available. You have %2$s — install it from the Plugins screen.', 'trending-now' ),
+							$release['version'],
+							ADVTN_VERSION
+						)
+						: sprintf(
+							/* translators: %s: installed version. */
+							__( 'Up to date. Latest release matches the installed version (%s).', 'trending-now' ),
+							ADVTN_VERSION
+						),
+					60
+				);
+				$notice = 'done';
 				break;
 
 			case 'test_loopback':
