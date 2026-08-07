@@ -20,6 +20,23 @@ final class ADVTN_Source_GDELT extends ADVTN_Source_Base {
 	public const ENDPOINT = 'https://api.gdeltproject.org/api/v2/doc/doc';
 
 	/**
+	 * GDELT asks for no more than one request every five seconds.
+	 *
+	 * Exceeding it earns a 429 whose penalty outlasts the stated window, and
+	 * while throttled GDELT returns misleading error text — "the specified
+	 * domain is too short or too long" for a perfectly valid single domain —
+	 * so a tripped rate limit is easily mistaken for a broken query.
+	 */
+	public const MIN_REQUEST_GAP = 5;
+
+	/**
+	 * Unix timestamp of the last outbound GDELT request this process made.
+	 *
+	 * @var float
+	 */
+	private static float $last_request_at = 0.0;
+
+	/**
 	 * {@inheritDoc}
 	 */
 	public function get_type(): string {
@@ -52,6 +69,8 @@ final class ADVTN_Source_GDELT extends ADVTN_Source_Base {
 			self::ENDPOINT
 		);
 
+		$this->respect_rate_limit();
+
 		$res    = $this->http_get( $endpoint );
 		$result = new ADVTN_Fetch_Result();
 
@@ -59,37 +78,59 @@ final class ADVTN_Source_GDELT extends ADVTN_Source_Base {
 		$result->http_code   = $res['code'];
 
 		if ( is_wp_error( $res['response'] ) ) {
-			$result->error = $res['response']->get_error_message();
+			$message = $res['response']->get_error_message();
+
+			// The default 5s http_timeout is below GDELT's typical response
+			// time, so this is the single most common way it fails.
+			if ( false !== stripos( $message, 'timed out' ) || false !== stripos( $message, 'timeout' ) ) {
+				$message .= ' ' . sprintf(
+					/* translators: %d: configured timeout in seconds. */
+					__( 'GDELT commonly takes 10-20 seconds to answer; the HTTP timeout is currently %d seconds. Raise it under Settings → Scheduling.', 'trending-now' ),
+					$this->settings->get_int( 'http_timeout', 1, 60 )
+				);
+			}
+
+			$result->error = $message;
+			return $result;
+		}
+
+		if ( 429 === $res['code'] ) {
+			$result->error = __( 'GDELT rate limit hit (HTTP 429). It allows roughly one request every five seconds, and the penalty outlasts that window. Wait a few minutes before retrying, and avoid repeated Test fetch clicks on GDELT rows.', 'trending-now' );
 			return $result;
 		}
 
 		if ( 200 !== $res['code'] ) {
-			/* translators: %d: HTTP status code. */
-			$result->error = sprintf( __( 'Unexpected HTTP status %d.', 'trending-now' ), (int) $res['code'] );
-			return $result;
-		}
-
-		// GDELT sometimes returns an HTML error page with a 200 status.
-		$content_type = strtolower( (string) wp_remote_retrieve_header( $res['response'], 'content-type' ) );
-		if ( '' !== $content_type && false === strpos( $content_type, 'json' ) ) {
-			$result->error = __( 'Response was not JSON (GDELT returned an error page).', 'trending-now' );
+			/* translators: 1: HTTP status code, 2: start of the response body. */
+			$result->error = sprintf( __( 'Unexpected HTTP status %1$d. Response began: %2$s', 'trending-now' ), (int) $res['code'], $this->snippet( $res['body'] ) );
 			return $result;
 		}
 
 		$decoded = json_decode( $res['body'], true );
 
-		// Malformed JSON has been observed in practice; fail cleanly rather
-		// than emitting a PHP warning downstream.
+		// GDELT reports several failures as plain text with a 200 status —
+		// "Your query was too short or too long.", "The specified domain is
+		// too short or too long.", the rate-limit notice, or an HTML error
+		// page. Surface whatever it actually said: a generic "not JSON" hides
+		// the one piece of information that would explain the failure.
 		if ( null === $decoded || ! is_array( $decoded ) ) {
-			$result->error = __( 'Malformed JSON in the GDELT response.', 'trending-now' );
+			$body = $this->snippet( $res['body'] );
+
+			$result->error = '' === $body
+				? __( 'GDELT returned an empty or unparseable response.', 'trending-now' )
+				/* translators: %s: start of the response body. */
+				: sprintf( __( 'GDELT rejected the request: %s', 'trending-now' ), $body );
+
 			ADVTN_Logger::log(
 				'error',
-				'GDELT returned malformed JSON.',
+				'GDELT returned a non-JSON response.',
 				array(
-					'source_id' => (string) ( $config['id'] ?? '' ),
-					'snippet'   => mb_substr( $res['body'], 0, 200 ),
+					'source_id'    => (string) ( $config['id'] ?? '' ),
+					'http_code'    => $res['code'],
+					'content_type' => strtolower( (string) wp_remote_retrieve_header( $res['response'], 'content-type' ) ),
+					'snippet'      => $body,
 				)
 			);
+
 			return $result;
 		}
 
@@ -207,6 +248,37 @@ final class ADVTN_Source_GDELT extends ADVTN_Source_Base {
 		$group = '(' . implode( ' OR ', array_map( static fn( $d ) => 'domain:' . $d, $domains ) ) . ')';
 
 		return '' !== $query ? $group . ' ' . $query : $group;
+	}
+
+	/**
+	 * Space consecutive GDELT calls within this process.
+	 *
+	 * Two GDELT sources in one inline run would otherwise fire back to back
+	 * and trip the limit on the second, which then looks like a broken query.
+	 *
+	 * @return void
+	 */
+	private function respect_rate_limit(): void {
+		$elapsed = microtime( true ) - self::$last_request_at;
+
+		if ( self::$last_request_at > 0.0 && $elapsed < self::MIN_REQUEST_GAP ) {
+			usleep( (int) ( ( self::MIN_REQUEST_GAP - $elapsed ) * 1000000 ) );
+		}
+
+		self::$last_request_at = microtime( true );
+	}
+
+	/**
+	 * First line of a response body, collapsed and trimmed for display.
+	 *
+	 * @param string $body Raw response body.
+	 * @return string
+	 */
+	private function snippet( string $body ): string {
+		$body = trim( wp_strip_all_tags( $body ) );
+		$body = (string) preg_replace( '/\s+/u', ' ', $body );
+
+		return mb_substr( $body, 0, 200 );
 	}
 
 	/**

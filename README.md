@@ -353,7 +353,7 @@ crawled most often — that is where this earns its keep.
 | `stagger_minutes` | 7 | Gap between per-source jobs |
 | `batch_max_sources` | 3 | Sources per queue batch |
 | `batch_time_budget` | 20 | Seconds before bailing and requeueing |
-| `http_timeout` | 5 | Per outbound request. Raise for GDELT |
+| `http_timeout` | 5 | 1–60. Per outbound request. Set to 30 if you use GDELT |
 | `source_fail_backoff` | 3600 | Seconds skipped after a failure, ×min(fails, 6) |
 | `archive_slug` | `trending` | Vary per site |
 | `archive_per_page` | 50 | 5–200 |
@@ -452,8 +452,21 @@ the item counts. Otherwise `news_share_pct` with no GDELT source, or all items s
 raises `backoff_until` by `source_fail_backoff × min(fails, 6)`. **Run ingest now**
 ignores backoff and retries immediately.
 
-**GDELT keeps failing.** `429` is rate limiting; a timeout means `http_timeout` is below
-GDELT's real response time. Raise it well above 5 seconds.
+**GDELT keeps failing.** It is the awkward one, and its errors mislead.
+
+- *Timeouts.* GDELT typically answers in 10–20 seconds, against a 5-second default. Set
+  `http_timeout` to 30.
+- *`429`.* The limit is roughly **one request every five seconds**, and the penalty
+  outlasts that window — once tripped, expect several minutes of failures. Each **Test
+  fetch** click is a live API call, so repeatedly testing a GDELT row while configuring it
+  is the usual way people trip it.
+- *Misleading error text.* While throttled, GDELT returns plain text with an HTTP `200`
+  saying things like "Your query was too short or too long." or "The specified domain is
+  too short or too long." — even for a single valid domain. **Do not treat those as
+  verdicts on your query while you are being rate limited.** Wait several minutes with no
+  requests, then test once.
+- One request per source per cycle is well within the limit; the problem is almost always
+  interactive testing, not normal operation.
 
 **`401` from the REST API.** Clock skew over 300 seconds, a replayed signature, or the
 message was built wrong — it is `timestamp + "\n" + raw body`, with an *empty* body for

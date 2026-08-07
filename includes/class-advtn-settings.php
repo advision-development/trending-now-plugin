@@ -156,7 +156,9 @@ final class ADVTN_Settings {
 		$out['stagger_minutes']       = self::clamp_int( $input['stagger_minutes'] ?? $d['stagger_minutes'], 0, 120 );
 		$out['batch_max_sources']     = self::clamp_int( $input['batch_max_sources'] ?? $d['batch_max_sources'], 1, 25 );
 		$out['batch_time_budget']     = self::clamp_int( $input['batch_time_budget'] ?? $d['batch_time_budget'], 5, 120 );
-		$out['http_timeout']          = self::clamp_int( $input['http_timeout'] ?? $d['http_timeout'], 1, 30 );
+		// GDELT routinely needs 10-20s, well past the 5s default, so the ceiling
+		// has to leave room for it.
+		$out['http_timeout']          = self::clamp_int( $input['http_timeout'] ?? $d['http_timeout'], 1, 60 );
 		$out['source_fail_backoff']   = self::clamp_int( $input['source_fail_backoff'] ?? $d['source_fail_backoff'], 60, 86400 );
 		$out['archive_per_page']      = self::clamp_int( $input['archive_per_page'] ?? $d['archive_per_page'], 5, 200 );
 

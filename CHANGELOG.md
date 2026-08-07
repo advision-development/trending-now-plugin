@@ -5,6 +5,31 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **GDELT requests failed at 10 seconds regardless of `http_timeout`.** WordPress passes
+  `timeout` through to Requests but never sets `connect_timeout`, which Requests
+  hardcodes to 10 seconds and which covers the TLS handshake. GDELT throttles by
+  stalling that handshake — measured at ~12s — so every request died as
+  `cURL error 28: Connection timed out` with no indication that the real cause was rate
+  limiting. Outbound requests now raise the connect ceiling to match `http_timeout`.
+- **GDELT's own error text was discarded.** It reports several failures as plain text
+  with an HTTP 200 — "Your query was too short or too long.", "The specified domain is
+  too short or too long.", the rate-limit notice — and all of them collapsed into a
+  generic "Malformed JSON" or "not JSON" message. The response body is now surfaced in
+  the error and the log.
+- HTTP 429 from GDELT is called out explicitly, with the one-request-per-five-seconds
+  rule and a warning that the penalty outlasts that window.
+
+### Changed
+
+- `http_timeout` ceiling raised from 30 to 60 seconds, with help text noting that a GDELT
+  source needs roughly 30.
+- Consecutive GDELT requests within one run are spaced at least five seconds apart, so
+  two GDELT sources cannot trip the limit on each other.
+
 ## [1.0.0] — 2026-08-06
 
 First release. Implements `docs/trending-now-plugin-spec.md` in full — Phase 1 plus the

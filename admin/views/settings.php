@@ -206,7 +206,10 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 		</tr>
 		<tr>
 			<th scope="row"><label for="advtn-http-timeout"><?php esc_html_e( 'HTTP timeout (seconds)', 'trending-now' ); ?></label></th>
-			<td><input type="number" min="1" max="30" id="advtn-http-timeout" name="advtn[http_timeout]" value="<?php echo esc_attr( (string) $advtn_s['http_timeout'] ); ?>" /></td>
+			<td>
+				<input type="number" min="1" max="60" id="advtn-http-timeout" name="advtn[http_timeout]" value="<?php echo esc_attr( (string) $advtn_s['http_timeout'] ); ?>" />
+				<p class="description"><?php esc_html_e( 'Per outbound request. WordPress REST and RSS sources answer in well under a second, but GDELT routinely takes 10-20 seconds — if you use a GDELT source, set this to 30 or it will fail with a timeout every cycle.', 'trending-now' ); ?></p>
+			</td>
 		</tr>
 		<tr>
 			<th scope="row"><label for="advtn-backoff"><?php esc_html_e( 'Failure backoff (seconds)', 'trending-now' ); ?></label></th>

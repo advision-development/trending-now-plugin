@@ -41,16 +41,32 @@ abstract class ADVTN_Source_Base implements ADVTN_Source_Interface {
 	 */
 	protected function http_get( string $url, array $args = array() ): array {
 		$started = microtime( true );
+		$timeout = $this->settings->get_int( 'http_timeout', 1, 60 );
 
 		$defaults = array(
-			'timeout'     => $this->settings->get_int( 'http_timeout', 1, 30 ),
+			'timeout'     => $timeout,
 			'redirection' => 3,
 			'user-agent'  => self::USER_AGENT,
 			'headers'     => array( 'Accept' => 'application/json' ),
 		);
 
+		// WordPress passes `timeout` straight through to Requests but never
+		// touches `connect_timeout`, which Requests hardcodes to 10 seconds and
+		// which covers the TLS handshake. An API that throttles by stalling the
+		// handshake — GDELT does exactly this — therefore fails at 10s with
+		// "Connection timed out", no matter how high http_timeout is set. Lift
+		// the connect ceiling to match, for this request only.
+		$raise_connect_timeout = static function ( &$handle ) use ( $timeout ): void {
+			if ( is_resource( $handle ) || $handle instanceof \CurlHandle ) {
+				curl_setopt( $handle, CURLOPT_CONNECTTIMEOUT, $timeout );
+			}
+		};
+
+		add_action( 'http_api_curl', $raise_connect_timeout, 10, 1 );
 		$response = wp_remote_get( $url, array_merge( $defaults, $args ) );
-		$ms       = (int) round( ( microtime( true ) - $started ) * 1000 );
+		remove_action( 'http_api_curl', $raise_connect_timeout, 10 );
+
+		$ms = (int) round( ( microtime( true ) - $started ) * 1000 );
 
 		if ( is_wp_error( $response ) ) {
 			return array(
