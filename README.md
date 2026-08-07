@@ -372,13 +372,26 @@ crawled most often — that is where this earns its keep.
 | `class_prefix` | `advtn` | Vary per site |
 | `hub_url` / `hub_secret` | — | Hub and spoke modes |
 | `ingest_secret` | generated | Signs `/ingest` and `/status` |
-| `serpapi_key` | — | Required by SerpAPI sources |
+| `serpapi_key` | — | Required by SerpAPI sources. See constants below |
 | `github_token` | — | Only needed if the plugin repo is private |
 | `auto_update` | `true` | Offer updates from GitHub releases |
 | `delete_data_on_uninstall` | `false` | |
 
-`link_rel_external` applies **only** to GDELT items. Internal network links stay plain
-followed links — that is the entire point of the plugin.
+`link_rel_external` applies **only** to news items (`gdelt`, `serpapi`). Internal network
+links stay plain followed links — that is the entire point of the plugin.
+
+### Credentials as constants
+
+Both credentials can be defined in `wp-config.php` instead of being stored in the
+database, which keeps them out of backups, settings exports and the admin screen:
+
+```php
+define( 'ADVTN_SERPAPI_KEY',  '…' );
+define( 'ADVTN_GITHUB_TOKEN', '…' );
+```
+
+A constant wins over the stored option, and the matching admin field is disabled with a
+note so an empty box is not mistaken for an unset key.
 
 ## Hooks
 
@@ -458,6 +471,11 @@ bin/dev reset       # destroy containers and volumes
 |---|---|
 | Site under test | <http://localhost:8080> — `admin` / `admin` |
 | Source site | <http://127.0.0.1:8081> — `admin` / `admin` |
+
+Copy `.env.example` to `.env` and fill in `SERPAPI_KEY` / `GITHUB_TOKEN`. Docker Compose
+loads that file automatically and passes both through as the constants above, so local
+testing uses real credentials without ever writing them to the database. `.env` is
+gitignored.
 
 Stack notes:
 

@@ -122,6 +122,46 @@ final class ADVTN_Settings {
 	}
 
 	/**
+	 * Read a credential, preferring a wp-config.php constant.
+	 *
+	 * `serpapi_key` maps to `ADVTN_SERPAPI_KEY`, and so on. A constant keeps the
+	 * secret out of the database and out of any settings export, which is what
+	 * you want on a real host; the stored option stays as the fallback so the
+	 * admin screen still works for people who have nowhere to put a constant.
+	 *
+	 * @param string $key Setting key.
+	 * @return string
+	 */
+	public function get_secret( string $key ): string {
+		$constant = 'ADVTN_' . strtoupper( $key );
+
+		if ( defined( $constant ) ) {
+			$value = trim( (string) constant( $constant ) );
+
+			if ( '' !== $value ) {
+				return $value;
+			}
+		}
+
+		return trim( $this->get_string( $key ) );
+	}
+
+	/**
+	 * Whether a credential is being supplied by a constant.
+	 *
+	 * The admin field is disabled when it is, so an empty box is not mistaken
+	 * for an unset key.
+	 *
+	 * @param string $key Setting key.
+	 * @return bool
+	 */
+	public function secret_is_constant( string $key ): bool {
+		$constant = 'ADVTN_' . strtoupper( $key );
+
+		return defined( $constant ) && '' !== trim( (string) constant( $constant ) );
+	}
+
+	/**
 	 * Persist a partial settings update after sanitization.
 	 *
 	 * @param array<string,mixed> $values Raw values.

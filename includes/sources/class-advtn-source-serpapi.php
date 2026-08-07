@@ -66,8 +66,11 @@ final class ADVTN_Source_SerpAPI extends ADVTN_Source_Base {
 				'q'       => rawurlencode( $query ),
 				'gl'      => $this->clean_locale( (string) ( $config['serp_country'] ?? 'us' ), 'us' ),
 				'hl'      => $this->clean_locale( (string) ( $config['serp_language'] ?? 'en' ), 'en' ),
-				// 0 = relevance, 1 = date. Recency is the point here.
-				'so'      => '0' === (string) ( $config['serp_sort'] ?? '1' ) ? '0' : '1',
+				// No `so` here: SerpAPI rejects it outright alongside `q`
+				// ("`q` and `so` parameters can't be used together"), because
+				// sort order only applies to topic and section browsing.
+				// Ordering does not matter much anyway — the selector re-sorts
+				// by published_at.
 				'api_key' => rawurlencode( $key ),
 			),
 			self::ENDPOINT
@@ -222,7 +225,6 @@ final class ADVTN_Source_SerpAPI extends ADVTN_Source_Base {
 		$clean['serp_domains']  = $this->clean_domains( (array) $raw_domains );
 		$clean['serp_country']  = $this->clean_locale( (string) ( $config['serp_country'] ?? 'us' ), 'us' );
 		$clean['serp_language'] = $this->clean_locale( (string) ( $config['serp_language'] ?? 'en' ), 'en' );
-		$clean['serp_sort']     = '0' === (string) ( $config['serp_sort'] ?? '1' ) ? '0' : '1';
 		$clean['url']           = '';
 
 		if ( '' === $clean['label'] ) {
@@ -493,7 +495,7 @@ final class ADVTN_Source_SerpAPI extends ADVTN_Source_Base {
 	 * @return string
 	 */
 	private function api_key(): string {
-		return trim( $this->settings->get_string( 'serpapi_key' ) );
+		return $this->settings->get_secret( 'serpapi_key' );
 	}
 
 	/**

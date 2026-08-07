@@ -10,9 +10,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **Google News source via SerpAPI** (`serpapi`), alongside the existing GDELT provider:
-  query, optional domain allowlist, country, language and sort order, with the key held
-  once in settings rather than per source. Grouped topic results are flattened, and the
-  publisher name comes from the result rather than being inferred from the host.
+  query, optional domain allowlist, country and language, with the key held once rather
+  than per source. Grouped topic results are flattened, and the publisher name comes from
+  the result rather than being inferred from the host. Verified against the live API: real
+  publisher URLs, dates parsed to UTC, thumbnails present, no `excerpt` (Google News does
+  not return one) and the allowlist dropping 19 of 29 results with no leaks.
+- **Credentials can come from `wp-config.php` constants** — `ADVTN_SERPAPI_KEY` and
+  `ADVTN_GITHUB_TOKEN` — which keeps them out of the database and out of any settings
+  export. The stored option remains the fallback, and the admin field is disabled with a
+  note when a constant is in force, so an empty box is never mistaken for an unset key.
 - **Credit exhaustion is handled as its own failure.** SerpAPI reports it as a plain
   message that reads much like a rate limit, but one needs a human to top up and the
   other clears itself, so they are classified separately and worded differently.
@@ -30,6 +36,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **SerpAPI rejected every query.** The request sent `so` (sort order) alongside `q`,
+  which the API refuses outright — sort only applies to topic and section browsing, not
+  free-text search. Caught on the first live call, and only because the new error
+  surfacing reported what the API actually said.
 - **GDELT requests failed at 10 seconds regardless of `http_timeout`.** WordPress passes
   `timeout` through to Requests but never sets `connect_timeout`, which Requests
   hardcodes to 10 seconds and which covers the TLS handshake. GDELT throttles by

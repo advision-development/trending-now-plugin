@@ -49,7 +49,7 @@ $advtn_badge = static function ( bool $value ): string {
 	<button type="submit" class="button" name="advtn_do" value="purge_cache"><?php esc_html_e( 'Purge render cache', 'trending-now' ); ?></button>
 	<button type="submit" class="button" name="advtn_do" value="test_loopback"><?php esc_html_e( 'Test loopback', 'trending-now' ); ?></button>
 	<button type="submit" class="button" name="advtn_do" value="check_updates"><?php esc_html_e( 'Check for updates', 'trending-now' ); ?></button>
-	<?php if ( '' !== $settings->get_string( 'serpapi_key' ) ) : ?>
+	<?php if ( '' !== $settings->get_secret( 'serpapi_key' ) ) : ?>
 		<button type="submit" class="button" name="advtn_do" value="check_serpapi"><?php esc_html_e( 'Check SerpAPI credits', 'trending-now' ); ?></button>
 	<?php endif; ?>
 	<button type="submit" class="button advtn-confirm" name="advtn_do" value="release_lock"><?php esc_html_e( 'Release lock', 'trending-now' ); ?></button>
@@ -112,7 +112,7 @@ $advtn_badge = static function ( bool $value ): string {
 				?>
 			</td>
 		</tr>
-		<?php if ( '' !== $settings->get_string( 'serpapi_key' ) ) : ?>
+		<?php if ( '' !== $settings->get_secret( 'serpapi_key' ) ) : ?>
 			<tr>
 				<th><?php esc_html_e( 'SerpAPI credits', 'trending-now' ); ?></th>
 				<td>

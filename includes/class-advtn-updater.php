@@ -379,6 +379,6 @@ final class ADVTN_Updater {
 	 * @return string
 	 */
 	private function token(): string {
-		return trim( $this->settings->get_string( 'github_token' ) );
+		return $this->settings->get_secret( 'github_token' );
 	}
 }

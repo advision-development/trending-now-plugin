@@ -139,12 +139,8 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 			</label>
 
 			<label class="advtn-type-field" data-types="serpapi"<?php echo esc_attr( $for_types( array( 'serpapi' ) ) ); ?>>
-				<span><?php esc_html_e( 'Sort by', 'trending-now' ); ?></span>
-				<select name="sources[<?php echo esc_attr( (string) $index ); ?>][serp_sort]">
-					<option value="1" <?php selected( (string) ( $source['serp_sort'] ?? '1' ), '1' ); ?>><?php esc_html_e( 'Date (newest first)', 'trending-now' ); ?></option>
-					<option value="0" <?php selected( (string) ( $source['serp_sort'] ?? '1' ), '0' ); ?>><?php esc_html_e( 'Relevance', 'trending-now' ); ?></option>
-				</select>
-				<em><?php esc_html_e( 'Each fetch costs one SerpAPI search credit.', 'trending-now' ); ?></em>
+				<span><?php esc_html_e( 'Items per cycle', 'trending-now' ); ?></span>
+				<em><?php esc_html_e( 'Set above. Each fetch costs one SerpAPI search credit regardless of how many items come back.', 'trending-now' ); ?></em>
 			</label>
 		</div>
 

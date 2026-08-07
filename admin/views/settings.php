@@ -233,7 +233,10 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 		<tr>
 			<th scope="row"><label for="advtn-serpapi-key"><?php esc_html_e( 'SerpAPI key', 'trending-now' ); ?></label></th>
 			<td>
-				<input type="password" class="large-text code" id="advtn-serpapi-key" name="advtn[serpapi_key]" value="<?php echo esc_attr( (string) $advtn_s['serpapi_key'] ); ?>" autocomplete="off" />
+				<input type="password" class="large-text code" id="advtn-serpapi-key" name="advtn[serpapi_key]" value="<?php echo esc_attr( (string) $advtn_s['serpapi_key'] ); ?>" autocomplete="off" <?php disabled( $settings->secret_is_constant( 'serpapi_key' ) ); ?> />
+				<?php if ( $settings->secret_is_constant( 'serpapi_key' ) ) : ?>
+					<p class="description"><strong><?php esc_html_e( 'Supplied by the ADVTN_SERPAPI_KEY constant; this field is ignored.', 'trending-now' ); ?></strong></p>
+				<?php endif; ?>
 				<p class="description">
 					<?php esc_html_e( 'Required by "Google News (SerpAPI)" sources. Each fetch spends one search credit, so one source on a daily cycle costs about 30 a month. Get a key at serpapi.com.', 'trending-now' ); ?>
 				</p>
@@ -242,7 +245,10 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 		<tr>
 			<th scope="row"><label for="advtn-github-token"><?php esc_html_e( 'GitHub token', 'trending-now' ); ?></label></th>
 			<td>
-				<input type="password" class="large-text code" id="advtn-github-token" name="advtn[github_token]" value="<?php echo esc_attr( (string) $advtn_s['github_token'] ); ?>" autocomplete="off" />
+				<input type="password" class="large-text code" id="advtn-github-token" name="advtn[github_token]" value="<?php echo esc_attr( (string) $advtn_s['github_token'] ); ?>" autocomplete="off" <?php disabled( $settings->secret_is_constant( 'github_token' ) ); ?> />
+				<?php if ( $settings->secret_is_constant( 'github_token' ) ) : ?>
+					<p class="description"><strong><?php esc_html_e( 'Supplied by the ADVTN_GITHUB_TOKEN constant; this field is ignored.', 'trending-now' ); ?></strong></p>
+				<?php endif; ?>
 				<p class="description">
 					<?php esc_html_e( 'Only needed because the plugin repository is private. A fine-grained personal access token with read-only Contents access is enough. Without it, update checks return "no release found".', 'trending-now' ); ?>
 				</p>

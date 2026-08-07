@@ -16,6 +16,10 @@ x-wp-env: &wp_env
     /* The source site and the hub both live on loopback in this stack,
        which wp_http_validate_url() rejects outright. */
     define( 'ADVTN_ALLOW_LOCAL_URLS', true );
+    /* Credentials come from .env in the project root, which docker compose
+       loads automatically. Empty values fall through to the stored option. */
+    define( 'ADVTN_SERPAPI_KEY', '${SERPAPI_KEY:-}' );
+    define( 'ADVTN_GITHUB_TOKEN', '${GITHUB_TOKEN:-}' );
 
 services:
   db:
