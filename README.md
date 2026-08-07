@@ -169,11 +169,13 @@ Gutenberg, classic widgets and theme templates:
 
 **Block** — *Trending Now*, with the same options in the inspector.
 
-Three layouts. **`news`** is the Google News / MSN style: source name and a relative
+Three layouts, and **`news` is the default** — what you get with a bare `[trending_now]`.
+It is the Google News / MSN style: source name and a relative
 timestamp, the headline, and a thumbnail on the right. Thumbnails carry fixed dimensions
 so they reserve their space instead of shifting the layout, and everything below the first
 card is lazy-loaded — the first is fetched eagerly because it is usually the one above the
-fold. **`list`** is compact text links, **`cards`** a grid with excerpts.
+fold. **`list`** is compact text links, **`cards`** a grid with excerpts. An item with no
+thumbnail simply lets its headline span the full width, as Google News does.
 
 Enabling **site icons** puts a publisher favicon beside each source name, as in the
 Google News and MSN feeds. The URL is derived from the stored host — a news API's own
@@ -418,8 +420,8 @@ crawled most often — that is where this earns its keep.
 | `mode` | `direct` | `direct` · `hub` · `spoke` |
 | `widget_limit` | 30 | Links in the widget |
 | `max_age_hours` | 0 | 0–720. Hide anything older. `48` = nothing over two days |
-| `layout` | `list` | `list` · `news` · `cards`. Default for shortcode, block and template tag |
-| `show_images` / `show_source` / `show_date` | off / on / on | Display defaults |
+| `layout` | `news` | `list` · `news` · `cards`. Default for shortcode, block and template tag |
+| `show_images` / `show_source` / `show_date` | on / on / on | Display defaults |
 | `show_icons` | off | Publisher favicon beside the source name |
 | `news_share_pct` | 20 | 0–50. Slots reserved for third-party news |
 | `max_source_share_pct` | 20 | 5–100. Soft cap per source |

@@ -14,6 +14,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tiers, so it outranks the exposure floor; the admin warns when a floor is set longer
   than the cutoff, because that combination promises a run the cutoff will not let
   finish. Curated links are exempt, since they carry their own expiry.
+- **`news` is now the default layout**, with thumbnails on — a bare `[trending_now]`
+  renders the card style with the image pinned right, rather than a plain text list.
+  Sites that never chose a layout pick this up on upgrade; anything set explicitly, in
+  settings or per shortcode, is untouched.
 - **`news` layout** — source name, relative timestamp, headline and a right-hand
   thumbnail, after the Google News and MSN feed cards. Thumbnails carry fixed dimensions
   so they reserve their space rather than shifting the layout as they load, everything

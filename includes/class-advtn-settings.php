@@ -34,8 +34,11 @@ final class ADVTN_Settings {
 			'mode'                     => 'direct',
 			'widget_limit'             => 30,
 			'max_age_hours'            => 0,
-			'layout'                   => 'list',
-			'show_images'              => false,
+			// Out of the box this is the Google News style card: source line,
+			// headline, thumbnail pinned right. Images default on because the
+			// layout is built around them.
+			'layout'                   => 'news',
+			'show_images'              => true,
 			'show_source'              => true,
 			'show_icons'               => false,
 			'show_date'                => true,
