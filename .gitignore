@@ -2,6 +2,11 @@
 /node_modules/
 package-lock.json
 
+# Local credentials. docker compose reads .env automatically; never commit it.
+.env
+.env.*
+!.env.example
+
 .DS_Store
 Thumbs.db
 
