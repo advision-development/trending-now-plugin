@@ -225,24 +225,68 @@ final class ADVTN_Renderer {
 			return null;
 		}
 
+		return array(
+			'iso'   => gmdate( 'c', $timestamp ),
+			'label' => $this->date_label( $timestamp ),
+		);
+	}
+
+	/**
+	 * The visible timestamp for a publication time.
+	 *
+	 * @param int $timestamp Unix time.
+	 * @return string
+	 */
+	private function date_label( int $timestamp ): string {
+		if ( 'relative' !== $this->settings->get_string( 'date_style' ) ) {
+			return (string) wp_date( 'M j', $timestamp );
+		}
+
 		$age = time() - $timestamp;
 
 		// Under a day, a relative stamp reads as "this is current" at a glance,
 		// which a bare date does not. Older than that, the date is the more
 		// useful fact. Mirrors how Google News and MSN present it.
-		if ( $age >= 0 && $age < DAY_IN_SECONDS ) {
-			$label = $age < HOUR_IN_SECONDS
-				/* translators: %d: whole minutes. */
-				? sprintf( _x( '%dm', 'minutes ago', 'trending-now' ), max( 1, (int) floor( $age / MINUTE_IN_SECONDS ) ) )
-				/* translators: %d: whole hours. */
-				: sprintf( _x( '%dh', 'hours ago', 'trending-now' ), (int) floor( $age / HOUR_IN_SECONDS ) );
-		} else {
-			$label = (string) wp_date( 'M j', $timestamp );
+		if ( $age < 0 || $age >= DAY_IN_SECONDS ) {
+			return (string) wp_date( 'M j', $timestamp );
 		}
 
-		return array(
-			'iso'   => gmdate( 'c', $timestamp ),
-			'label' => $label,
+		return $age < HOUR_IN_SECONDS
+			/* translators: %d: whole minutes. */
+			? sprintf( _x( '%dm', 'minutes ago', 'trending-now' ), max( 1, (int) floor( $age / MINUTE_IN_SECONDS ) ) )
+			/* translators: %d: whole hours. */
+			: sprintf( _x( '%dh', 'hours ago', 'trending-now' ), (int) floor( $age / HOUR_IN_SECONDS ) );
+	}
+
+	/**
+	 * Recompute relative timestamps against the current time.
+	 *
+	 * The cached blob holds whatever the label was when it was built, and the
+	 * cache is only busted once per ingest cycle — so without this an article
+	 * rendered at "42m" still claims "42m" the following day. The `datetime`
+	 * attribute is already in the markup, so the true age is recoverable
+	 * without touching the database.
+	 *
+	 * @param string $html Rendered HTML.
+	 * @return string
+	 */
+	private function refresh_dates( string $html ): string {
+		if ( 'relative' !== $this->settings->get_string( 'date_style' ) || false === strpos( $html, '__date"' ) ) {
+			return $html;
+		}
+
+		$prefix = preg_quote( $this->settings->get_string( 'class_prefix' ), '/' );
+
+		return (string) preg_replace_callback(
+			'/(<time class="' . $prefix . '__date" datetime="([^"]+)"[^>]*>)([^<]*)(<\/time>)/',
+			function ( array $m ): string {
+				$timestamp = strtotime( $m[2] );
+
+				return false === $timestamp
+					? $m[0]
+					: $m[1] . esc_html( $this->date_label( $timestamp ) ) . $m[4];
+			},
+			$html
 		);
 	}
 
@@ -351,6 +395,8 @@ final class ADVTN_Renderer {
 		if ( '' === $html ) {
 			return '';
 		}
+
+		$html = $this->refresh_dates( $html );
 
 		if ( self::$css_emitted ) {
 			return str_replace( self::CSS_MARKER, '', $html );

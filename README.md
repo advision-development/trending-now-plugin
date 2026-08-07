@@ -185,9 +185,18 @@ not the server, so the no-HTTP-during-render rule still holds; it does mean Goog
 favicon service sees your visitors, which is why it is off by default. Filter
 `advtn_source_icon_url` to self-host or swap providers.
 
-Timestamps are relative inside the last day — `45m`, `6h` — and a date before that, which
-is what makes a feed read as current at a glance. The `datetime` attribute is always the
-full ISO timestamp.
+Timestamps come in two styles, set by `date_style`. **`relative`** shows `45m` or `6h`
+inside the last day and a date before that, which is what makes a feed read as current at
+a glance. **`date`** always shows the date.
+
+Either way the label is recalculated on every request from the `datetime` attribute
+already in the markup, not baked into the cached HTML. Without that, an article rendered
+at `42m` would still claim `42m` a full ingest interval later — up to 20 hours of a page
+insisting day-old news is minutes old.
+
+> **Relative stamps advertise your publishing rhythm.** On a once-a-day cycle every item
+> drifts towards `20h` or `23h` together, which reads as a batch update rather than a live
+> feed. If that matters more to you than the freshness cue, use `date`.
 
 **Template tags:**
 
@@ -427,6 +436,7 @@ crawled most often — that is where this earns its keep.
 | `layout` | `news` | `list` · `news` · `cards`. Default for shortcode, block and template tag |
 | `show_images` / `show_source` / `show_date` | on / on / on | Display defaults |
 | `show_icons` | off | Publisher favicon beside the source name |
+| `date_style` | `relative` | `relative` (45m, 6h, then a date) · `date` (always a date) |
 | `news_share_pct` | 20 | 0–50. Slots reserved for third-party news |
 | `max_source_share_pct` | 20 | 5–100. Soft cap per source |
 | `exposure_floor_days` | 3 | Guaranteed consecutive days once shown |

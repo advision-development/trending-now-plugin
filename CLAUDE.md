@@ -181,6 +181,10 @@ the removal keep their news classification.
 - `max_age_hours` filters candidates in `ADVTN_Repository::candidates()`, before the tiers,
   so it outranks the exposure floor. A floor longer than the cutoff promises a run that
   cannot complete — the admin flags the mismatch. Curated links are exempt.
+- Timestamp labels are rewritten in `ADVTN_Renderer::emit()` from the `datetime`
+  attribute, not taken from the cached blob. The cache is only busted once per ingest
+  cycle, so a baked-in relative label would be wrong for up to `ingest_interval_hours`.
+  The rewrite runs for both styles, so switching `date_style` does not need a purge.
 - Display defaults (`layout`, `show_images`, `show_source`, `show_date`) live in Settings;
   the shortcode and block only override keys that were explicitly supplied, so leaving an
   attribute off inherits rather than silently forcing a value.

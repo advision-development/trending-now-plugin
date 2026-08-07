@@ -9,6 +9,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **Relative timestamps were frozen at build time.** The label was baked into the cached
+  HTML, and the cache is only busted once per ingest cycle — so an article rendered at
+  `42m` still claimed `42m` up to twenty hours later. Labels are now recalculated on every
+  request from the `datetime` attribute already in the markup, which costs no database
+  access and keeps the cached blob valid. The rewrite runs whichever style is configured,
+  so changing `date_style` takes effect immediately rather than waiting for a purge.
 - **The news layout put the thumbnail below the headline instead of beside it.** The base
   `__item` rule sets `flex-wrap: wrap` for the list layout, and the news rule never reset
   it — so with `flex-basis: auto` a long headline claimed the whole line and pushed the
@@ -39,6 +45,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   so they reserve their space rather than shifting the layout as they load, everything
   below the first card is lazy-loaded, and the first is fetched eagerly because it is
   usually the one above the fold.
+- **Timestamp style toggle** (`date_style`). `relative` shows `45m` or `6h` inside the
+  last day and a date beyond it; `date` always shows the date. Relative stamps read as
+  live, but on a once-a-day cycle every item drifts towards `20h` together, which
+  advertises the batch update — the toggle is there to trade one against the other.
 - **Site icons** beside source names (`show_icons`, off by default). The URL is derived
   from the stored host rather than fetched during ingest — a news API's own icon field is
   itself just a favicon-service URL built from the domain, so deriving it needs no schema

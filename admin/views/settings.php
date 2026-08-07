@@ -103,6 +103,17 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 				<label><input type="checkbox" name="advtn[show_source]" value="1" <?php checked( ! empty( $advtn_s['show_source'] ) ); ?> /> <?php esc_html_e( 'Source name', 'trending-now' ); ?></label><br />
 				<label><input type="checkbox" name="advtn[show_icons]" value="1" <?php checked( ! empty( $advtn_s['show_icons'] ) ); ?> /> <?php esc_html_e( 'Site icons beside the source name', 'trending-now' ); ?></label><br />
 				<label><input type="checkbox" name="advtn[show_date]" value="1" <?php checked( ! empty( $advtn_s['show_date'] ) ); ?> /> <?php esc_html_e( 'Timestamp', 'trending-now' ); ?></label>
+				<p style="margin:.5em 0 0">
+					<label for="advtn-date-style"><strong><?php esc_html_e( 'Timestamp style', 'trending-now' ); ?></strong></label><br />
+					<select id="advtn-date-style" name="advtn[date_style]">
+						<option value="relative" <?php selected( (string) $advtn_s['date_style'], 'relative' ); ?>><?php esc_html_e( 'Relative under a day (45m, 6h), date beyond', 'trending-now' ); ?></option>
+						<option value="date" <?php selected( (string) $advtn_s['date_style'], 'date' ); ?>><?php esc_html_e( 'Always a date (Aug 7)', 'trending-now' ); ?></option>
+					</select>
+				</p>
+				<p class="description">
+					<?php esc_html_e( 'Relative stamps are recalculated on every request, so they stay accurate between ingest cycles rather than freezing at whatever they said when the page was cached.', 'trending-now' ); ?>
+					<?php esc_html_e( 'They do advertise your publishing rhythm, though: on a once-a-day cycle every item drifts towards "20h" or "23h" together, which reads as a batch update. Choose dates if that matters more than the freshness cue.', 'trending-now' ); ?>
+				</p>
 				<p class="description"><?php esc_html_e( 'Thumbnails are lazy-loaded below the first card and carry fixed dimensions, so they do not shift the layout as they arrive. Timestamps show as 45m or 6h within the last day, and a date before that.', 'trending-now' ); ?></p>
 				<p class="description"><?php esc_html_e( 'Site icons are fetched by the visitor\'s browser from Google\'s favicon service, which means that service sees your visitors. Filter advtn_source_icon_url to self-host them or use another provider.', 'trending-now' ); ?></p>
 			</td>
