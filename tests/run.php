@@ -271,6 +271,35 @@ advtn_assert_same(
 );
 
 /* ---------------------------------------------------------------------- */
+/* Per-source timeout override                                             */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * Build a provider instance against a chosen global http_timeout.
+ *
+ * @param int $global Global http_timeout value.
+ * @return ADVTN_Source_SerpAPI
+ */
+function advtn_provider_with_timeout( int $global ): ADVTN_Source_SerpAPI {
+	$GLOBALS['advtn_test_options']['advtn_settings'] = array( 'http_timeout' => $global );
+
+	return new ADVTN_Source_SerpAPI( new ADVTN_Settings() );
+}
+
+$advtn_p = advtn_provider_with_timeout( 5 );
+
+advtn_assert_same( 30, $advtn_p->config_timeout( array( 'timeout' => 30 ) ), 'timeout: an override wins over the global' );
+advtn_assert_same( 5, $advtn_p->config_timeout( array( 'timeout' => 0 ) ), 'timeout: zero inherits the global' );
+advtn_assert_same( 5, $advtn_p->config_timeout( array() ), 'timeout: an absent key inherits the global' );
+advtn_assert_same( 5, $advtn_p->config_timeout( array( 'timeout' => '' ) ), 'timeout: an empty string inherits the global' );
+advtn_assert_same( 120, $advtn_p->config_timeout( array( 'timeout' => 9999 ) ), 'timeout: an override clamps to the 120s ceiling' );
+advtn_assert_same( 1, $advtn_p->config_timeout( array( 'timeout' => 1 ) ), 'timeout: one second is allowed' );
+advtn_assert_same( 5, $advtn_p->config_timeout( array( 'timeout' => -8 ) ), 'timeout: a negative override inherits rather than clamping to 1' );
+
+$advtn_p20 = advtn_provider_with_timeout( 20 );
+advtn_assert_same( 20, $advtn_p20->config_timeout( array() ), 'timeout: the global is read per instance, not cached across them' );
+
+/* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );
 

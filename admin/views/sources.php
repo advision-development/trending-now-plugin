@@ -79,6 +79,19 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 				<input type="number" min="1" max="250" name="sources[<?php echo esc_attr( (string) $index ); ?>][limit]" value="<?php echo esc_attr( (string) ( $source['limit'] ?? 10 ) ); ?>" />
 			</label>
 
+			<label>
+				<span><?php esc_html_e( 'Timeout (seconds)', 'trending-now' ); ?></span>
+				<input
+					type="number"
+					min="0"
+					max="120"
+					name="sources[<?php echo esc_attr( (string) $index ); ?>][timeout]"
+					value="<?php echo esc_attr( (string) ( $source['timeout'] ?? 0 ) ); ?>"
+					placeholder="<?php echo esc_attr( sprintf( /* translators: %d: global timeout in seconds. */ __( 'global (%d)', 'trending-now' ), advtn()->settings()->get_int( 'http_timeout', 1, 60 ) ) ); ?>"
+				/>
+				<em><?php esc_html_e( 'Blank or 0 uses the global setting. Raise it for a slow provider — SerpAPI does a live scrape and can exceed the 5s default under load.', 'trending-now' ); ?></em>
+			</label>
+
 			<label class="advtn-check">
 				<input type="checkbox" name="sources[<?php echo esc_attr( (string) $index ); ?>][enabled]" value="1" <?php checked( ! empty( $source['enabled'] ) ); ?> />
 				<span><?php esc_html_e( 'Enabled', 'trending-now' ); ?></span>

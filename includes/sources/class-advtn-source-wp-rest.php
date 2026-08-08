@@ -59,7 +59,7 @@ final class ADVTN_Source_WP_REST extends ADVTN_Source_Base {
 			$base . '/wp-json/wp/v2/posts'
 		);
 
-		$res    = $this->http_get( $endpoint );
+		$res    = $this->http_get( $endpoint, array( 'timeout' => $this->config_timeout( $config ) ) );
 		$result = new ADVTN_Fetch_Result();
 
 		$result->duration_ms = $res['ms'];

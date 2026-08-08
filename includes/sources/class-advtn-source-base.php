@@ -117,6 +117,29 @@ abstract class ADVTN_Source_Base implements ADVTN_Source_Interface {
 	}
 
 	/**
+	 * The timeout in force for one source, in seconds.
+	 *
+	 * A row's own `timeout` overrides the global `http_timeout`; 0, '' or an
+	 * absent key inherits it. The per-row ceiling is 120 against the global's
+	 * 60 on purpose: the global is a blunt default applied to every source,
+	 * where a per-row override is a considered choice about one provider.
+	 *
+	 * Public rather than protected so it can be exercised directly.
+	 *
+	 * @param array<string,mixed> $config Source config row.
+	 * @return int
+	 */
+	public function config_timeout( array $config ): int {
+		$override = (int) ( $config['timeout'] ?? 0 );
+
+		if ( $override > 0 ) {
+			return max( 1, min( 120, $override ) );
+		}
+
+		return $this->settings->get_int( 'http_timeout', 1, 60 );
+	}
+
+	/**
 	 * Build a normalized item, or null when it must be rejected.
 	 *
 	 * Rejection rules (spec §5.1): invalid or non-http(s) URL, empty title
@@ -194,6 +217,7 @@ abstract class ADVTN_Source_Base implements ADVTN_Source_Interface {
 			'type'          => $this->get_type(),
 			'enabled'       => ! empty( $config['enabled'] ),
 			'limit'         => max( 1, min( 100, (int) ( $config['limit'] ?? 10 ) ) ),
+			'timeout'       => max( 0, min( 120, (int) ( $config['timeout'] ?? 0 ) ) ),
 			'stagger_index' => max( 0, (int) ( $config['stagger_index'] ?? 0 ) ),
 		);
 	}

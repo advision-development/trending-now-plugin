@@ -81,7 +81,7 @@ final class ADVTN_Source_SerpAPI extends ADVTN_Source_Base {
 
 		$endpoint = add_query_arg( $params, self::ENDPOINT );
 
-		$res    = $this->http_get( $endpoint );
+		$res    = $this->http_get( $endpoint, array( 'timeout' => $this->config_timeout( $config ) ) );
 		$result = new ADVTN_Fetch_Result();
 
 		$result->duration_ms = $res['ms'];

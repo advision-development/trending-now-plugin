@@ -107,8 +107,135 @@ if ( ! function_exists( '__' ) ) {
 	}
 }
 
+if ( ! function_exists( 'sanitize_text_field' ) ) {
+	/**
+	 * Stub of sanitize_text_field().
+	 *
+	 * @param string $str Input.
+	 * @return string
+	 */
+	function sanitize_text_field( string $str ): string {
+		$str = wp_strip_all_tags( $str, true );
+		return trim( (string) preg_replace( '/[\r\n\t]+/', ' ', $str ) );
+	}
+}
+
+if ( ! function_exists( 'sanitize_title' ) ) {
+	/**
+	 * Stub of sanitize_title().
+	 *
+	 * @param string $title Input.
+	 * @return string
+	 */
+	function sanitize_title( string $title ): string {
+		$title = strtolower( wp_strip_all_tags( $title, true ) );
+		$title = (string) preg_replace( '/[^a-z0-9_-]+/', '-', $title );
+		return trim( $title, '-' );
+	}
+}
+
+if ( ! function_exists( 'wp_kses_post' ) ) {
+	/**
+	 * Stub of wp_kses_post(): permissive, enough for these tests.
+	 *
+	 * @param string $data Input.
+	 * @return string
+	 */
+	function wp_kses_post( string $data ): string {
+		return $data;
+	}
+}
+
+if ( ! function_exists( 'esc_url_raw' ) ) {
+	/**
+	 * Stub of esc_url_raw(): drops anything that is not http(s).
+	 *
+	 * @param string $url URL.
+	 * @return string
+	 */
+	function esc_url_raw( string $url ): string {
+		$url = trim( $url );
+		if ( '' === $url ) {
+			return '';
+		}
+
+		$scheme = strtolower( (string) parse_url( $url, PHP_URL_SCHEME ) );
+
+		return in_array( $scheme, array( 'http', 'https' ), true ) ? $url : '';
+	}
+}
+
+if ( ! function_exists( 'untrailingslashit' ) ) {
+	/**
+	 * Stub of untrailingslashit().
+	 *
+	 * @param string $value Input.
+	 * @return string
+	 */
+	function untrailingslashit( string $value ): string {
+		return rtrim( $value, '/\\' );
+	}
+}
+
+if ( ! function_exists( 'wp_json_encode' ) ) {
+	/**
+	 * Stub of wp_json_encode().
+	 *
+	 * @param mixed $data  Data.
+	 * @param int   $flags json_encode flags.
+	 * @return string|false
+	 */
+	function wp_json_encode( $data, int $flags = 0 ) {
+		return json_encode( $data, $flags ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
+	}
+}
+
+/**
+ * Options, backed by an array a test can write to.
+ *
+ * Only enough to let ADVTN_Settings resolve, which is all the pure-logic
+ * classes need. Anything that actually wants the database belongs in a WP
+ * integration suite.
+ *
+ * @var array<string,mixed>
+ */
+$GLOBALS['advtn_test_options'] = array();
+
+if ( ! function_exists( 'get_option' ) ) {
+	/**
+	 * Read a stubbed option.
+	 *
+	 * @param string $option  Option name.
+	 * @param mixed  $default Fallback.
+	 * @return mixed
+	 */
+	function get_option( string $option, $default = false ) {
+		return array_key_exists( $option, $GLOBALS['advtn_test_options'] )
+			? $GLOBALS['advtn_test_options'][ $option ]
+			: $default;
+	}
+}
+
+if ( ! function_exists( 'update_option' ) ) {
+	/**
+	 * Stub of update_option().
+	 *
+	 * @param string $name     Option name.
+	 * @param mixed  $value    Value.
+	 * @param mixed  $autoload Ignored.
+	 * @return bool
+	 */
+	function update_option( string $name, $value, $autoload = null ): bool {
+		$GLOBALS['advtn_test_options'][ $name ] = $value;
+		return true;
+	}
+}
+
 require_once dirname( __DIR__ ) . '/includes/class-advtn-url.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-hmac.php';
 require_once dirname( __DIR__ ) . '/includes/sources/interface-advtn-source.php';
 require_once dirname( __DIR__ ) . '/includes/sources/class-advtn-source-base.php';
 require_once dirname( __DIR__ ) . '/includes/sources/class-advtn-source-serpapi.php';
+require_once dirname( __DIR__ ) . '/includes/class-advtn-settings.php';
+require_once dirname( __DIR__ ) . '/includes/class-advtn-repository.php';
+require_once dirname( __DIR__ ) . '/includes/class-advtn-archive.php';

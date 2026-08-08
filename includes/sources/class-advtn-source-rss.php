@@ -47,7 +47,20 @@ final class ADVTN_Source_RSS extends ADVTN_Source_Base {
 		// SimplePie caches feeds for 12h by default, which would silently serve
 		// stale data on a daily ingest. Shorten it for this call only.
 		add_filter( 'wp_feed_cache_transient_lifetime', array( $this, 'cache_lifetime' ), 100 );
+
+		// fetch_feed() builds its own SimplePie instance and WordPress never
+		// wires our timeout to it, so http_timeout has never applied to an RSS
+		// source at all — it has been sitting on SimplePie's own default. This
+		// is the only hook that reaches the object before it fetches.
+		$advtn_timeout     = $this->config_timeout( $config );
+		$advtn_set_timeout = static function ( $feed ) use ( $advtn_timeout ): void {
+			$feed->set_timeout( $advtn_timeout );
+		};
+		add_action( 'wp_feed_options', $advtn_set_timeout, 10, 1 );
+
 		$feed = fetch_feed( $url );
+
+		remove_action( 'wp_feed_options', $advtn_set_timeout, 10 );
 		remove_filter( 'wp_feed_cache_transient_lifetime', array( $this, 'cache_lifetime' ), 100 );
 
 		$result              = new ADVTN_Fetch_Result();

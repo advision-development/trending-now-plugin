@@ -62,6 +62,7 @@ final class ADVTN_Source_Hub extends ADVTN_Source_Base {
 		$res    = $this->http_get(
 			$endpoint,
 			array(
+				'timeout' => $this->config_timeout( $config ),
 				'headers' => array(
 					'Accept'            => 'application/json',
 					'X-ADVTN-Timestamp' => (string) $timestamp,
