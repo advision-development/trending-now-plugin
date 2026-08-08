@@ -15,7 +15,7 @@ Renders a server-side "Trending Now" section on a WordPress site containing a co
 1. **Owned sites** — other WordPress installs in the network, pulled via their public REST API (RSS fallback).
 2. **News sources** — authoritative third-party articles pulled from the GDELT DOC 2.0 API, filtered to a domain allowlist.
 
-It also exposes a paginated "see all" archive at `/trending/` containing the full retained set.
+It also exposes a paginated "see all" archive at `/trending/` containing every retained item still inside the `max_age_hours` window.
 
 ### Primary goal
 
@@ -198,7 +198,10 @@ At the end of every successful ingest (`ADVTN_Ingest::finalize()`):
 2. `DELETE` where `first_seen < NOW() - INTERVAL {retention_days} DAY` (default 90).
 3. Delete in batches of 500 with a `LIMIT` clause; loop with a time budget. Never a single unbounded `DELETE`.
 
-The retention window caps total archive size, which is what keeps `/trending/` defensible rather than an unbounded link dump.
+Retention is the outer bound on the table, not on what `/trending/` shows. The archive
+applies `max_age_hours` on top of it (§9.1), so a row can be retained for deduplication
+long after it has stopped being displayed anywhere. Between the two, `/trending/` stays a
+rolling window rather than an unbounded link dump.
 
 ---
 
@@ -216,7 +219,8 @@ Small scalar config, read on most requests.
   'widget_limit'            => 30,
   'news_share_pct'          => 20,         // 0-50; % of slots reserved for source_type=gdelt
   'max_source_share_pct'    => 20,         // 5-100; cap on any single source's slots
-  'exposure_floor_days'     => 3,          // min consecutive days an item stays once shown
+  'max_age_hours'           => 72,         // 0-720; 0 disables. Applies to widget AND archive
+  'exposure_floor_days'     => 2,          // min consecutive days an item stays once shown
   'retention_days'          => 90,
   'ingest_interval_hours'   => 20,         // due-check threshold, not a strict schedule
   'stagger_minutes'         => 7,          // gap between per-source jobs
@@ -814,6 +818,18 @@ Ship `assets/css/trending-media.css` as an unenqueued reference copy for anyone 
 - Flush rewrites on activation, deactivation, and whenever `archive_slug` changes. Never call `flush_rewrite_rules()` on `init`.
 - Load `templates/archive.php` via `template_include`, theme-overridable at `{theme}/trending-now/archive.php`.
 - Paginate at `archive_per_page` (50). Order `published_at DESC`. Use `SQL_CALC_FOUND_ROWS`-free counting: a separate `COUNT(*)` query, cached in a short transient (15 min).
+- Apply `max_age_hours` to both the page query and the count, using the same clause the
+  widget's `candidates()` uses: curated links exempt, rows with no `published_at`
+  excluded. The archive and the widget have to agree on what "current" means — an item
+  that vanishes from one and not the other looks like a bug to anyone reading the page.
+  Retention still bounds the table underneath, so an item outside the window is invisible
+  but still deduplicates.
+- Because the cutoff moves with wall-clock time, the cached count describes a set that is
+  always slightly behind. That is the same 15-minute tolerance the count already had for
+  freshly ingested rows, and out-of-range pages redirect to page 1 rather than 404. The
+  transient is dropped explicitly in `ADVTN_Settings::update()` when `max_age_hours`
+  changes, because a stale count there is not 15 minutes wrong, it is wrong until it
+  expires.
 - Output `rel="prev"` / `rel="next"` link tags and `wp_link_pages`-style navigation.
 - Set a proper `<title>`, `og:` tags, and a canonical to the paginated URL.
 - Include a short block of real introductory copy at the top, editable via a setting. A page of pure links with no context is exactly what a link dump looks like.
@@ -1069,7 +1085,7 @@ Not blockers for implementation; defaults are set. Revisit after two weeks of da
 1. **Widget placement.** Homepage plus top-level section pages, versus sitewide footer. Sitewide gets more raw links; boilerplate links are discounted more. Start with homepage + section pages.
 2. **Archive indexability.** Default indexable. Reconsider if the page attracts no impressions and is consuming crawl budget.
 3. **`link_rel_external`.** Default empty (followed) on news links. Outbound links to authoritative sites do not transfer authority *to* you and will not make your pages index — the reason to include them is that a trending widget containing only your own network's links looks like exactly what it is. That is a real reason. It is not a ranking mechanism, so do not tune it as one.
-4. **`exposure_floor_days`.** Default 3. If server logs show Googlebot hitting the homepage only every few days, raise to 5–7.
+4. **`exposure_floor_days`.** Default 2. If server logs show Googlebot hitting the homepage only every few days, raise to 5–7 — and raise `max_age_hours` with it, or the cutoff will end the run the floor just promised.
 5. **News share.** Default 20%. Lower it if network URL volume exceeds available slots.
 
 ---

@@ -306,11 +306,19 @@ keeps one source from dominating.
 > fraction of its quota and the shortfall is backfilled with network links. Either raise
 > the cap or spread the news across more sources.
 
-**Age cutoff.** `max_age_hours` drops anything published longer ago than that — `48` for a
-two-day window, `0` to disable. It applies before the tiers, so it beats the exposure
-floor: with a 48-hour cutoff, an `exposure_floor_days` of 3 promises a run the cutoff will
-not let it finish. Keep the floor under the cutoff. Curated links are exempt, since they
-carry their own expiry.
+**Age cutoff.** `max_age_hours` drops anything published longer ago than that — `72` by
+default for a three-day window, `0` to disable. It applies to the widget **and** to
+`/trending/`, so an article that was on the list yesterday falls off both today once it
+crosses the line. Rows outside the window stay in the table until retention prunes them,
+so they still deduplicate against anything a source finds again.
+
+It applies before the tiers, so it beats the exposure floor — and the two are measured
+from different clocks. The floor counts from when an item was *first shown*, the cutoff
+from when it was *published*, so an item ingested six hours after publication needs six
+hours of slack between them or its guaranteed run is cut short. That is why the defaults
+ship at 72 hours against a 2-day floor rather than a 3-day one. The Settings screen warns
+when the floor meets or exceeds the cutoff. Curated links are exempt, since they carry
+their own expiry.
 
 **Three tiers, filled in order:**
 
@@ -476,7 +484,7 @@ crawled most often — that is where this earns its keep.
 |---|---|---|
 | `mode` | `direct` | `direct` · `hub` · `spoke` |
 | `widget_limit` | 30 | Links in the widget |
-| `max_age_hours` | 0 | 0–720. Hide anything older. `48` = nothing over two days |
+| `max_age_hours` | 72 | 0–720. Hide anything older, in the widget and on `/trending/`. `0` disables |
 | `layout` | `news` | `list` · `news` · `cards`. Default for shortcode, block and template tag |
 | `show_images` / `show_source` / `show_date` | on / on / on | Display defaults |
 | `show_icons` | off | Publisher favicon beside the source name |
@@ -484,8 +492,8 @@ crawled most often — that is where this earns its keep.
 | `date_style` | `relative` | `relative` (45m, 6h, then a date) · `date` (always a date) |
 | `news_share_pct` | 20 | 0–50. Slots reserved for third-party news |
 | `max_source_share_pct` | 20 | 5–100. Soft cap per source |
-| `exposure_floor_days` | 3 | Guaranteed consecutive days once shown |
-| `retention_days` | 90 | Hard cap on archive size |
+| `exposure_floor_days` | 2 | Guaranteed consecutive days once shown. Keep under `max_age_hours` |
+| `retention_days` | 90 | Hard cap on table size. `/trending/` is bounded by `max_age_hours` |
 | `ingest_interval_hours` | 20 | Due-check threshold, not a schedule |
 | `stagger_minutes` | 7 | Gap between per-source jobs |
 | `batch_max_sources` | 3 | Sources per queue batch |

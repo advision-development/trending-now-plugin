@@ -33,7 +33,12 @@ final class ADVTN_Settings {
 		return array(
 			'mode'                     => 'direct',
 			'widget_limit'             => 30,
-			'max_age_hours'            => 0,
+			// Three days. The plugin exists to give a new URL a guaranteed
+			// window of exposure, not to keep it forever — an item still on the
+			// list a week after publication is spending a slot a newer one needs.
+			// 0 disables the cutoff entirely; keep it above exposure_floor_days
+			// in hours, or the floor promises a run the cutoff will not allow.
+			'max_age_hours'            => 72,
 			// Out of the box this is the Google News style card: source line,
 			// headline, thumbnail pinned right. Images default on because the
 			// layout is built around them.
@@ -46,7 +51,11 @@ final class ADVTN_Settings {
 			'date_style'               => 'relative',
 			'news_share_pct'           => 20,
 			'max_source_share_pct'     => 20,
-			'exposure_floor_days'      => 3,
+			// Two days, deliberately under max_age_hours' three. The floor runs
+			// from first_shown_at and the cutoff from published_at, so anything
+			// ingested with a lag needs that 24h of slack or its guaranteed run
+			// is cut short by the cutoff before it finishes.
+			'exposure_floor_days'      => 2,
 			'retention_days'           => 90,
 			'ingest_interval_hours'    => 20,
 			'stagger_minutes'          => 7,
@@ -192,6 +201,14 @@ final class ADVTN_Settings {
 		// than in the admin handler because the settings are equally reachable
 		// from WP-CLI, a migration or a provisioning script — and a slug change
 		// that never flushes leaves the archive quietly 404ing.
+		// The archive's item count is derived from the cutoff and cached for 15
+		// minutes, so changing the cutoff without dropping it leaves pagination
+		// describing a set that no longer exists. Same reasoning as the flush
+		// above: this has to happen wherever the setting is written from.
+		if ( $before['max_age_hours'] !== $clean['max_age_hours'] ) {
+			delete_transient( 'advtn_archive_count' );
+		}
+
 		if ( $before['archive_slug'] !== $clean['archive_slug'] || $before['archive_enabled'] !== $clean['archive_enabled'] ) {
 			update_option( 'advtn_flush_rewrites', 1, false );
 		}

@@ -124,17 +124,21 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 			<td>
 				<input type="number" min="0" max="720" id="advtn-max-age" name="advtn[max_age_hours]" value="<?php echo esc_attr( (string) $advtn_s['max_age_hours'] ); ?>" />
 				<p class="description">
-					<?php esc_html_e( 'Hide anything published longer ago than this. 0 disables the cutoff; 48 means nothing older than two days. Curated links are exempt — they have their own expiry.', 'trending-now' ); ?>
+					<?php esc_html_e( 'Hide anything published longer ago than this, in the widget and on the archive alike. 0 disables the cutoff; 72 means nothing older than three days. Curated links are exempt — they have their own expiry.', 'trending-now' ); ?>
 					<?php
 					$advtn_age   = (int) $advtn_s['max_age_hours'];
 					$advtn_floor = (int) $advtn_s['exposure_floor_days'];
-					if ( $advtn_age > 0 && ( $advtn_floor * 24 ) > $advtn_age ) :
+					// >= rather than >: an equal pair only looks safe. The floor
+					// is measured from first_shown_at and the cutoff from
+					// published_at, so any ingest lag at all makes an equal pair
+					// a floor that cannot finish.
+					if ( $advtn_age > 0 && ( $advtn_floor * 24 ) >= $advtn_age ) :
 						?>
 						<br /><strong>
 						<?php
 						printf(
 							/* translators: 1: exposure floor in days, 2: cutoff in hours. */
-							esc_html__( 'Note: the exposure floor is %1$d days but the cutoff is %2$d hours, so items are dropped before their guaranteed run finishes. Lower the floor to match.', 'trending-now' ),
+							esc_html__( 'Note: the exposure floor is %1$d days and the cutoff is %2$d hours, so items are dropped before their guaranteed run finishes — the floor counts from when an item was first shown, the cutoff from when it was published, so any delay between the two eats the difference. Lower the floor.', 'trending-now' ),
 							$advtn_floor,
 							$advtn_age
 						);

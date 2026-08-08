@@ -12,6 +12,11 @@ declare( strict_types=1 );
 define( 'ABSPATH', __DIR__ . '/' );
 define( 'ADVTN_TEST_HOME', 'https://mysite.example/' );
 
+// Core time constants the pure-logic classes do arithmetic with.
+define( 'MINUTE_IN_SECONDS', 60 );
+define( 'HOUR_IN_SECONDS', 3600 );
+define( 'DAY_IN_SECONDS', 86400 );
+
 if ( ! function_exists( 'wp_parse_url' ) ) {
 	/**
 	 * Stub of wp_parse_url().

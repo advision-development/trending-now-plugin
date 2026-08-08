@@ -552,29 +552,60 @@ final class ADVTN_Repository {
 	}
 
 	/**
-	 * A page of archive items. Includes stale rows; excludes nothing else.
+	 * The age clause shared by the archive's page and count queries.
 	 *
-	 * @param int $per_page Page size.
-	 * @param int $offset   Row offset.
+	 * Deliberately identical to the one in candidates() and recent_active():
+	 * curated links are exempt because they carry their own expiry, and a row
+	 * with no published_at cannot be judged against a cutoff so it is dropped.
+	 * The archive and the widget have to agree on what "current" means, or an
+	 * item vanishes from one and not the other for no reason a reader can see.
+	 *
+	 * @param string             $max_age_cutoff Oldest acceptable published_at, or ''.
+	 * @param array<int,mixed>   $params         Prepared parameters, appended to by reference.
+	 * @return string SQL fragment beginning with WHERE, or ''.
+	 */
+	private function archive_age_where( string $max_age_cutoff, array &$params ): string {
+		if ( '' === $max_age_cutoff ) {
+			return '';
+		}
+
+		$params[] = 'manual';
+		$params[] = $max_age_cutoff;
+
+		return ' WHERE ( source_type = %s OR ( published_at IS NOT NULL AND published_at >= %s ) )';
+	}
+
+	/**
+	 * A page of archive items. Includes stale rows; excludes anything past the
+	 * age cutoff.
+	 *
+	 * @param int    $per_page       Page size.
+	 * @param int    $offset         Row offset.
+	 * @param string $max_age_cutoff Oldest acceptable published_at, or ''.
 	 * @return array<int,array<string,mixed>>
 	 */
-	public function archive_page( int $per_page, int $offset ): array {
+	public function archive_page( int $per_page, int $offset, string $max_age_cutoff = '' ): array {
 		global $wpdb;
 
 		$per_page = max( 1, min( 200, $per_page ) );
 		$offset   = max( 0, $offset );
 		$table    = $this->table();
 
+		$params = array();
+		$where  = $this->archive_age_where( $max_age_cutoff, $params );
+
+		$params[] = $per_page;
+		$params[] = $offset;
+
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				"SELECT id, url, title, excerpt, image_url, published_at, site_name, host, source_type
-				 FROM {$table}
+				 FROM {$table}{$where}
 				 ORDER BY published_at DESC, id DESC
 				 LIMIT %d OFFSET %d",
-				$per_page,
-				$offset
+				$params
 			),
 			ARRAY_A
 		);
@@ -583,15 +614,31 @@ final class ADVTN_Repository {
 	}
 
 	/**
-	 * Total archive row count.
+	 * Total archive row count, honouring the same age cutoff as archive_page().
 	 *
+	 * @param string $max_age_cutoff Oldest acceptable published_at, or ''.
 	 * @return int
 	 */
-	public function archive_count(): int {
+	public function archive_count( string $max_age_cutoff = '' ): int {
 		global $wpdb;
-		$table = $this->table();
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+
+		$table  = $this->table();
+		$params = array();
+		$where  = $this->archive_age_where( $max_age_cutoff, $params );
+
+		if ( '' === $where ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+			return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" );
+		}
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery, WordPress.DB.PreparedSQL.NotPrepared
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"SELECT COUNT(*) FROM {$table}{$where}",
+				$params
+			)
+		);
 	}
 
 	/**

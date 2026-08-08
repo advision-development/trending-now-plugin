@@ -7,6 +7,33 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **`max_age_hours` now bounds the archive as well as the widget, and defaults to 72.**
+  It previously defaulted to `0` — no cutoff at all — and applied only to widget
+  selection, so `/trending/` listed everything retained: on a 90-day retention that is a
+  three-month wall of links, most of them long past the window the plugin exists to
+  provide. An article published four days ago was on the widget yesterday and gone today,
+  but sat on the archive for another twelve weeks. Both surfaces now use the same clause,
+  including its two exemptions — curated links keep their own expiry, and a row with no
+  publish date cannot be judged against a cutoff so it is dropped.
+
+  Rows outside the window stay in the table until `retention_days` prunes them, so they
+  still deduplicate against anything a source finds again. Retention now bounds the table;
+  `max_age_hours` bounds what is displayed.
+
+  **This changes the shipped default, not existing installs.** Stored settings win over
+  defaults, so a site that already has a value keeps it — check Settings → Maximum age if
+  you want the new behaviour on an install that predates this release.
+
+- **`exposure_floor_days` defaults to 2, down from 3.** The floor counts from
+  `first_shown_at` and the cutoff from `published_at`, so an equal pair only looks safe:
+  an item ingested six hours after publication has its guaranteed run cut six hours short.
+  Two days against a 72-hour cutoff leaves a day of slack for ingest lag. The Settings
+  screen's mismatch warning now fires when the floor meets *or* exceeds the cutoff — it
+  previously required strictly greater, so the exactly-equal case that breaks passed
+  silently.
+
 ### Added
 
 - **Per-source HTTP timeout, a 20-entry attempt history, and a manual single-source retry.**

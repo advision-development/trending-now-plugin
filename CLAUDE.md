@@ -182,9 +182,21 @@ the removal keep their news classification.
   anything else. Expiry sets the row to `stale` rather than deleting it — leaving it
   `active` would merely stop it being *placed* while it carried on competing as an
   ordinary candidate, which looks exactly like the timer not working.
-- `max_age_hours` filters candidates in `ADVTN_Repository::candidates()`, before the tiers,
-  so it outranks the exposure floor. A floor longer than the cutoff promises a run that
-  cannot complete — the admin flags the mismatch. Curated links are exempt.
+- `max_age_hours` bounds the widget *and* the archive: `ADVTN_Repository::candidates()`
+  before the tiers, and `archive_page()` / `archive_count()` through the shared
+  `archive_age_where()`. All of them use the same clause — curated links exempt, rows with
+  no `published_at` excluded — because an item that disappears from one surface and not the
+  other reads as a bug. `retention_days` bounds the table underneath, not the archive, so a
+  row outside the window is invisible everywhere while still deduplicating.
+- The cutoff outranks the exposure floor, and the two count from different clocks: the
+  floor from `first_shown_at`, the cutoff from `published_at`. An equal pair is not safe —
+  any ingest lag makes it a floor that cannot finish — which is why the defaults ship 72
+  hours against a 2-day floor, and why the admin's mismatch warning fires on `>=` rather
+  than `>`.
+- Anything that derives from `max_age_hours` and is cached has to be dropped when it
+  changes. `ADVTN_Settings::update()` deletes `advtn_archive_count` for that reason, in the
+  same place and for the same reason as the deferred rewrite flush: the setting is equally
+  reachable from WP-CLI, a migration or a provisioning script.
 - Timestamp labels are rewritten in `ADVTN_Renderer::emit()` from the `datetime`
   attribute, not taken from the cached blob. The cache is only busted once per ingest
   cycle, so a baked-in relative label would be wrong for up to `ingest_interval_hours`.

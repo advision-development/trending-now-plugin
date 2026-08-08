@@ -370,6 +370,59 @@ advtn_assert_same(
 );
 
 /* ---------------------------------------------------------------------- */
+/* Maximum age cutoff                                                      */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * Build a settings instance against a chosen max_age_hours.
+ *
+ * @param mixed $hours Raw setting value.
+ * @return ADVTN_Settings
+ */
+function advtn_settings_with_max_age( $hours ): ADVTN_Settings {
+	$GLOBALS['advtn_test_options']['advtn_settings'] = array( 'max_age_hours' => $hours );
+
+	return new ADVTN_Settings();
+}
+
+advtn_assert_same(
+	'',
+	advtn_settings_with_max_age( 0 )->max_age_cutoff(),
+	'max age: 0 disables the cutoff entirely'
+);
+
+advtn_assert_same(
+	gmdate( 'Y-m-d H:i:s', time() - ( 72 * HOUR_IN_SECONDS ) ),
+	advtn_settings_with_max_age( 72 )->max_age_cutoff(),
+	'max age: 72 hours resolves to a cutoff three days back'
+);
+
+advtn_assert_same(
+	gmdate( 'Y-m-d H:i:s', time() - ( 720 * HOUR_IN_SECONDS ) ),
+	advtn_settings_with_max_age( 9999 )->max_age_cutoff(),
+	'max age: an over-range value clamps to the 720-hour ceiling'
+);
+
+advtn_assert_same(
+	'',
+	advtn_settings_with_max_age( -5 )->max_age_cutoff(),
+	'max age: a negative value clamps to 0 and disables the cutoff'
+);
+
+// The shipped defaults have to leave the exposure floor room to finish: the
+// floor counts from first_shown_at and the cutoff from published_at, so an
+// equal pair is cut short by any ingest lag at all.
+$advtn_defaults = ADVTN_Settings::sanitize( array() );
+
+advtn_assert_same( 72, $advtn_defaults['max_age_hours'], 'defaults: the cutoff ships at 72 hours' );
+advtn_assert_same( 2, $advtn_defaults['exposure_floor_days'], 'defaults: the exposure floor ships at 2 days' );
+advtn_assert_same(
+	true,
+	( $advtn_defaults['exposure_floor_days'] * 24 ) < $advtn_defaults['max_age_hours'],
+	'defaults: the exposure floor leaves slack under the cutoff'
+);
+
+/* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );
 

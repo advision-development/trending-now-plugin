@@ -136,7 +136,7 @@ final class ADVTN_Archive {
 			return (int) $cached;
 		}
 
-		$count = $this->repository->archive_count();
+		$count = $this->repository->archive_count( $this->settings->max_age_cutoff() );
 		set_transient( 'advtn_archive_count', $count, self::COUNT_TTL );
 
 		return $count;
@@ -151,7 +151,7 @@ final class ADVTN_Archive {
 		$per_page = $this->settings->get_int( 'archive_per_page', 5, 200 );
 		$offset   = ( $this->current_page() - 1 ) * $per_page;
 
-		return $this->repository->archive_page( $per_page, $offset );
+		return $this->repository->archive_page( $per_page, $offset, $this->settings->max_age_cutoff() );
 	}
 
 	/**
