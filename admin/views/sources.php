@@ -141,12 +141,63 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 			</label>
 		</div>
 
+		<?php
+		$advtn_attempts = isset( $state['attempts'] ) && is_array( $state['attempts'] ) ? $state['attempts'] : array();
+		if ( ! empty( $advtn_attempts ) ) :
+			$advtn_stats = ADVTN_Attempts::summary( $advtn_attempts );
+			try {
+				$advtn_source = advtn()->source( (string) ( $source['type'] ?? '' ) );
+			} catch ( \Throwable $e ) {
+				$advtn_source = null;
+			}
+			$advtn_ceiling = $advtn_source instanceof ADVTN_Source_Base
+				? $advtn_source->config_timeout( $source )
+				: advtn()->settings()->get_int( 'http_timeout', 1, 60 );
+			?>
+			<details class="advtn-attempts">
+				<summary>
+					<?php
+					printf(
+						/* translators: 1: attempt count, 2: median ms, 3: max ms, 4: timeout in seconds. */
+						esc_html__( 'Recent attempts (%1$d) — p50 %2$dms, max %3$dms, timeout %4$ds', 'trending-now' ),
+						(int) $advtn_stats['count'],
+						(int) $advtn_stats['p50'],
+						(int) $advtn_stats['max'],
+						(int) $advtn_ceiling
+					);
+					?>
+				</summary>
+				<ul class="advtn-attempts__list">
+					<?php foreach ( array_reverse( $advtn_attempts ) as $advtn_attempt ) : ?>
+						<li class="advtn-attempts__row advtn-attempts__row--<?php echo empty( $advtn_attempt['ok'] ) ? 'fail' : 'ok'; ?>">
+							<span class="advtn-attempts__time"><?php echo esc_html( (string) ( $advtn_attempt['t'] ?? '' ) ); ?></span>
+							<span class="advtn-attempts__status"><?php echo empty( $advtn_attempt['ok'] ) ? esc_html__( 'FAIL', 'trending-now' ) : esc_html__( 'ok', 'trending-now' ); ?></span>
+							<span class="advtn-attempts__ms"><?php echo esc_html( (string) ( $advtn_attempt['ms'] ?? 0 ) ); ?>ms</span>
+							<?php if ( ! empty( $advtn_attempt['code'] ) ) : ?>
+								<span class="advtn-attempts__code"><?php echo esc_html( (string) $advtn_attempt['code'] ); ?></span>
+							<?php endif; ?>
+							<?php if ( ! empty( $advtn_attempt['err'] ) ) : ?>
+								<span class="advtn-attempts__err"><?php echo esc_html( (string) $advtn_attempt['err'] ); ?></span>
+							<?php endif; ?>
+						</li>
+					<?php endforeach; ?>
+				</ul>
+			</details>
+		<?php endif; ?>
+
 		<div class="advtn-source__foot">
 			<button type="button" class="button advtn-test"><?php esc_html_e( 'Test fetch', 'trending-now' ); ?></button>
+			<?php if ( ! empty( $source['id'] ) ) : ?>
+				<a
+					class="button advtn-ingest-now"
+					href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=advtn_ingest_source&source=' . rawurlencode( (string) $source['id'] ) ), 'advtn_ingest_source' ) ); ?>"
+				><?php esc_html_e( 'Ingest now', 'trending-now' ); ?></a>
+			<?php endif; ?>
 			<label class="advtn-delete"><input type="checkbox" name="sources[<?php echo esc_attr( (string) $index ); ?>][_delete]" value="1" /> <?php esc_html_e( 'Delete on save', 'trending-now' ); ?></label>
 			<?php if ( ! empty( $state['last_error'] ) ) : ?>
 				<span class="advtn-source__error"><?php echo esc_html( (string) $state['last_error'] ); ?></span>
 			<?php endif; ?>
+			<em class="advtn-ingest-now__hint"><?php esc_html_e( 'Test fetch shows what would be ingested. Ingest now writes it, rebuilds the list and purges caches.', 'trending-now' ); ?></em>
 		</div>
 
 		<div class="advtn-test-result" hidden></div>
