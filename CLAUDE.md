@@ -63,6 +63,7 @@ includes/
   class-advtn-url.php         normalize / hash / host / is_valid
   class-advtn-repository.php  ALL SQL
   class-advtn-ingest.php      run() -> run_source() -> finalize()
+  class-advtn-attempts.php    per-source attempt ring + p50/max summary (pure static)
   class-advtn-scheduler.php   Action Scheduler (WP-Cron fallback)
   class-advtn-lock.php        atomic add_option() lock
   class-advtn-selector.php    three-tier slot allocation + rotation
@@ -201,6 +202,22 @@ the removal keep their news classification.
 - Per-site variation is a feature, not drift: `class_prefix`, `widget_limit`,
   `news_share_pct`, `heading_text` and `archive_slug` are meant to differ across the
   network (spec §11).
+- `http_timeout` is a global floor, not the whole story: a source row's own `timeout`
+  overrides it, and `ADVTN_Source_Base::config_timeout()` is the only place that resolves
+  the two. Providers pass the result in `http_get()`'s `$args`, which already wins over
+  its defaults. RSS is the exception — it goes through `fetch_feed()`, so its timeout has
+  to be set on the SimplePie object via `wp_feed_options`, added and removed around the
+  call like the cache-lifetime filter beside it. Resolving a source's provider to read its
+  `config_timeout()` — done for logging in `ADVTN_Ingest::timeout_for()` and for display in
+  the Sources tab — is wrapped in `try/catch(\Throwable)` and degrades to the global: a
+  provider registered through `advtn_source_map` can have a throwing constructor, and
+  neither a log line nor an admin page render may be the thing that takes a cycle down.
+- The admin "Ingest now" calls `ADVTN_Ingest::run_source()` directly rather than `run()`.
+  That is deliberate: the backoff check lives in `run()`'s scheduling loop, so calling
+  `run_source()` bypasses it, which is the entire point of a manual retry on a source that
+  has been failing.
+- Anything that writes source state writes the attempt ring with it. Both paths go through
+  `ADVTN_Attempts::record()` so the cap and the error truncation cannot drift apart.
 
 ## Testing
 

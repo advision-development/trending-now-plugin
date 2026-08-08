@@ -255,6 +255,7 @@ Ordered array of source config rows.
     'enabled'       => true,
     'url'           => 'https://example.com',   // site root for wp_rest; full feed URL for rss
     'limit'         => 10,                 // max items to ingest per cycle, 1-100
+    'timeout'       => 0,                  // seconds, 0-120; 0 inherits http_timeout
     'stagger_index' => 0,                  // assigned on save; position * stagger_minutes
   ],
   [
@@ -269,6 +270,18 @@ Ordered array of source config rows.
   ],
 ]
 ```
+
+`timeout` overrides `http_timeout` (§4.1) for this source alone. `0`, `''` or an absent key
+inherits the global; a positive value is resolved and clamped to 1–120 by
+`ADVTN_Source_Base::config_timeout()`, the single place the two settings meet. The per-row
+ceiling is double the global's — 120 against 60 — on purpose: the global is a blunt default
+applied to every source, where a per-row override is a considered choice about one
+provider. `config_timeout()` governs the *request* timeout only — the `timeout` argument
+passed to `wp_remote_get()`, or, for `rss`, `SimplePie::set_timeout()` (§6.8). It does not
+raise the TLS connect ceiling: `ADVTN_Source_Base::http_get()` computes
+`CURLOPT_CONNECTTIMEOUT` from the global `http_timeout` before the per-call `$args` merge
+that lets a caller override the request timeout, so the connect phase still follows the
+global regardless of a source's own `timeout`.
 
 ### 4.3 `advtn_source_state` — autoload `no`
 
@@ -286,6 +299,10 @@ Runtime state, keyed by source id. Written after every fetch attempt. This is th
     'items_new'     => 3,
     'consec_fails'  => 0,
     'backoff_until' => null,
+    'attempts'      => [
+      [ 't' => '2026-08-06 04:07:11', 'ok' => true, 'ms' => 812, 'code' => 200, 'err' => '' ],
+      // … newest last, capped at ADVTN_Attempts::MAX (20) — see §6.8.
+    ],
   ],
 ]
 ```
@@ -353,7 +370,9 @@ GET {url}/wp-json/wp/v2/posts
 
 - `_fields` must include `_embedded` or the embed payload is stripped.
 - `per_page` hard max is 100.
-- Request via `wp_remote_get()` with `timeout => http_timeout`, `redirection => 3`, `user-agent => 'AdvisionTrendingNow/1.0'`.
+- Request via `wp_remote_get()` with `timeout => config_timeout()` (§4.2 — the row's own
+  `timeout` if set, otherwise `http_timeout`), `redirection => 3`,
+  `user-agent => 'AdvisionTrendingNow/1.0'`.
 - Accept `200` only. Treat `401`/`403` as a configuration error (REST likely disabled) and surface a suggestion to switch that source to `rss`.
 
 Field mapping:
@@ -564,6 +583,58 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
 ```
 
 Commands: `ingest [--source=<id>] [--force]`, `select`, `render`, `status`, `prune`. Convenience only — nothing may depend on CLI availability.
+
+### 6.8 Per-source attempt history and manual retry
+
+Built after a live incident: a SerpAPI source fetched fine all afternoon, then failed
+overnight with `cURL error 28: Operation timed out after 5001 milliseconds`. Nothing was
+broken — `http_timeout` defaults to 5 seconds and SerpAPI's endpoint does a live scrape
+whose latency varies — but there was no history showing the drift beforehand, and no way to
+retry that one source from the admin without waiting for the next scheduled cycle or its
+failure backoff to expire.
+
+**The RSS fix.** `fetch_feed()` builds its own SimplePie instance, and WordPress never wires
+`http_timeout` to it, so before this feature an `rss` source's timeout was never
+`http_timeout` at all — it sat on SimplePie's own default regardless of the setting. The
+only hook that reaches the SimplePie object before it fetches is `wp_feed_options`;
+`ADVTN_Source_RSS::fetch()` adds a closure there that calls `set_timeout( config_timeout() )`
+and removes it immediately after the call, the same pattern as the cache-lifetime filter
+beside it, so two feed fetches inside one request cannot leak each other's timeout.
+
+**Attempt ring.** Every fetch, success or failure, appends one entry to `attempts` in that
+source's `advtn_source_state` row (§4.3): `t` (UTC timestamp), `ok`, `ms`, `code` (`null` on
+a transport error) and `err`. `ADVTN_Attempts::record()` keeps the most recent
+`ADVTN_Attempts::MAX` (20) entries and truncates `err` to `ADVTN_Attempts::ERROR_MAX` (120)
+characters **at write time**, not at read time — an untruncated cURL message can carry a
+long URL, and twenty of those per source is what turns a diagnostic aid into a bloated
+option. `ADVTN_Attempts::summary()` reduces the ring to a count, a
+median (`p50`) and a maximum, in milliseconds — the median rather than the mean so one
+outlier does not hide an otherwise healthy run of fetches. Both `ADVTN_Ingest::run_source()`
+(on success) and `record_failure()` (on failure) call `ADVTN_Attempts::record()`, so the cap
+and the truncation cannot drift apart between the two paths. The Sources tab renders the
+summary next to the timeout currently in force, so an operator can see latency climbing
+toward the ceiling before it starts failing outright.
+
+Resolving a source's provider to read its `config_timeout()` for this — done for logging in
+`ADVTN_Ingest::timeout_for()` and for display on the Sources tab — is wrapped in
+`try/catch(\Throwable)` and falls back to the global on failure. A provider registered
+through the `advtn_source_map` filter can have a constructor that throws, and this runs
+outside `run_source()`'s own try/catch, so it must not be able to take a cycle — or the
+Sources tab — down with it (§6.4: "one bad source must never abort the cycle").
+
+**Manual single-source ingest — "Ingest now".** Each source row on the Sources tab (§12.2)
+carries its own **Ingest now** button beside **Test fetch**. Where **Test fetch** calls
+`fetch()` and writes nothing, **Ingest now** calls `ADVTN_Ingest::run_source()` directly —
+not `run()` — for that one source id, writes the result, and then calls `finalize()`
+unconditionally regardless of whether the fetch succeeded. Calling `run_source()` directly
+is what makes this a retry rather than a request to wait: the failure-backoff check lives in
+`run()`'s scheduling loop, so a source parked in `backoff_until` is fetched anyway, on
+purpose. `finalize()` takes the lock, rebuilds the selection, purges the render cache and
+purges the host's full-page cache, exactly as an ordinary cycle does — a single-source retry
+is therefore not a free operation on a site sitting behind a page cache. If the lock is
+already held, the button shows the same "locked" notice every other locked action in this
+admin uses, rather than a bespoke message naming the age for one button; the age itself is
+on the Diagnostics tab (`ADVTN_Lock::age()`) for the operator who needs the number.
 
 ---
 
@@ -814,7 +885,17 @@ All of `advtn_settings`, grouped: Mode, Display, Rotation, Retention, Links, Arc
 
 ### 12.2 Sources
 
-Repeatable rows: label, type, URL, limit, enabled toggle, drag-to-reorder (order sets `stagger_index`). Type selector reveals type-specific fields. Per-row "Test fetch" button that runs `fetch()` synchronously via AJAX and shows the first 3 normalized items plus timing and HTTP code — without writing to the database. This is the single most useful thing in the admin.
+Repeatable rows: label, type, URL, limit, timeout, enabled toggle, drag-to-reorder (order
+sets `stagger_index`). Type selector reveals type-specific fields. Per-row "Test fetch"
+button that runs `fetch()` synchronously via AJAX and shows the first 3 normalized items
+plus timing and HTTP code — without writing to the database. This is the single most
+useful thing in the admin.
+
+A row with attempt history shows a **Recent attempts** disclosure: count, `p50`, max (all
+ms) and the timeout currently in force, expanding to the individual entries newest first
+(§6.8). Beside "Test fetch" sits **Ingest now**, a per-row retry that writes, bypasses
+failure backoff and finalizes unconditionally — see §6.8 for how it differs from "Test
+fetch" and from Diagnostics' "Run ingest now" (§12.3), which runs every enabled source.
 
 ### 12.3 Diagnostics — build this properly
 

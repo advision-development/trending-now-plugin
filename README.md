@@ -106,13 +106,32 @@ If nothing renders, Diagnostics will say why — see [Troubleshooting](#troubles
 | `rss` | Sites with the REST API disabled | SimplePie via `fetch_feed()`, with its 12-hour cache disabled for the call. |
 | `serpapi` | Third-party news | Google News via [SerpAPI](https://serpapi.com). Needs a key; **one search credit per fetch**. |
 
-Each row has a label, an item limit per cycle, an enabled toggle, and drag-to-reorder
-(order sets the ingest stagger). SerpAPI rows additionally take a query, an optional
-allowed-domain list, country and language.
+Each row has a label, an item limit per cycle, a timeout, an enabled toggle, and
+drag-to-reorder (order sets the ingest stagger). SerpAPI rows additionally take a query, an
+optional allowed-domain list, country and language.
+
+**Timeout** overrides the global `http_timeout` for that one row. Blank or `0` inherits the
+global; otherwise it is clamped to 1–120 seconds — double the global's ceiling of 60,
+because a per-row override is a considered choice about one provider, not a blunt default
+applied to everything. It sets how long that source's *request* may take; the TLS connect
+phase still follows the global `http_timeout` regardless.
 
 The tab exports the whole list as JSON and imports it back — merging on source id or
 replacing outright — so a source set can be moved between installs. Imported rows are
 validated exactly as though typed into the form; bad rows are reported and skipped.
+
+**Recent attempts.** A row that has been fetched at least once shows a disclosure with its
+last 20 attempts: timestamp, ok/fail, duration, HTTP code and error, newest first, plus a
+summary line of count, median (`p50`) and max duration next to the timeout currently in
+force. This is what turns "it failed once, three weeks ago" into "it has been drifting
+toward its timeout for the last six hours."
+
+**Test fetch** versus **Ingest now.** Every row has both, side by side. **Test fetch** runs
+the fetch and shows the first three normalized items, timing and HTTP status — it writes
+nothing. **Ingest now** writes: it fetches that one source for real, upserts whatever it
+finds, rebuilds the selection and purges caches, exactly like a normal cycle but for a
+single source. It also ignores that source's failure backoff, which is the point of
+pressing it on a source that has been failing — see [Troubleshooting](#troubleshooting).
 
 A SerpAPI source runs in one of two modes. **Top stories** is Google News' mainstream
 front page for the country and language you pick — no query needed, and the usual source
@@ -369,8 +388,9 @@ Requests are rejected outside a 300-second clock skew, replayed signatures are r
 Hub fields appear only in the modes that use them: the hub URL in spoke mode, the shared
 secret in hub and spoke.
 
-**Sources** — repeatable rows with per-row **Test fetch**, drag-to-reorder, type-specific
-fields, and JSON import/export.
+**Sources** — repeatable rows with a per-row timeout, **Test fetch**, **Ingest now**,
+drag-to-reorder, type-specific fields, a **Recent attempts** history once a row has been
+fetched, and JSON import/export.
 
 **Diagnostics** — the panel that matters when ingestion silently stops:
 
@@ -606,7 +626,15 @@ or all items stale.
 
 **A source shows an error and stops being tried.** That is the backoff: `consec_fails`
 raises `backoff_until` by `source_fail_backoff × min(fails, 6)`. **Run ingest now**
-ignores backoff and retries immediately.
+ignores backoff and retries immediately. To retry just that one source instead of every
+enabled one, use its row's own **Ingest now** button on the Sources tab.
+
+**A source times out intermittently.** `cURL error 28` names the ceiling it hit — "timed
+out after 5001 milliseconds" is the 5-second `http_timeout` default, not a network fault.
+Open that source's **Recent attempts** on the Sources tab: if p50 has been climbing toward
+the timeout, raise that row's **Timeout** rather than the global. SerpAPI does a live
+scrape and can exceed 5 seconds under load; 20–30 is a reasonable value for it. Owned
+`wp_rest` sources should keep failing fast.
 
 **The widget and the archive show different sets.** Almost always a full-page cache
 holding two snapshots taken at different times — the homepage cached after an ingest

@@ -5,6 +5,56 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Per-source HTTP timeout, a 20-entry attempt history, and a manual single-source retry.**
+  Built after a live incident: a SerpAPI source fetched fine all afternoon, then failed
+  overnight with `cURL error 28: Operation timed out after 5001 milliseconds`. Nothing was
+  broken — `http_timeout` defaults to 5 seconds and SerpAPI's endpoint does a live scrape
+  whose latency varies — but there was no history showing the drift beforehand, and no way
+  to retry that one source short of waiting for the next scheduled cycle or its failure
+  backoff to expire.
+
+  Each source row now has its own **Timeout**: blank or `0` inherits the global
+  `http_timeout`, otherwise it is clamped to 1–120 seconds by the single
+  `ADVTN_Source_Base::config_timeout()` every provider calls. The override changes the
+  *request* timeout only: `http_get()` still computes the TLS connect ceiling from the
+  global before a per-call override can win, so a provider given a longer timeout still
+  fails fast on a stalled handshake rather than a slow response.
+
+  Every fetch, success or failure, now appends to a 20-entry ring kept per source
+  (`ADVTN_Attempts`), surfaced on the Sources tab as **Recent attempts**: timestamp,
+  ok/fail, duration, HTTP code and error, newest first, plus a summary of count, median and
+  max duration next to the timeout currently in force. Error messages are truncated to 120
+  characters at write time, not read time — an untruncated cURL message can carry a long
+  URL, and twenty of those per source is what turns a diagnostic aid into a bloated option.
+  Both the success and failure paths funnel through the same recorder so the cap and the
+  truncation cannot drift apart between them. Source success and failure log entries also
+  now record the timeout that was in force at fetch time; resolving it means asking the
+  provider for its `config_timeout()`, which is wrapped in the same defensive
+  `try/catch(\Throwable)` as everything else that touches a third-party provider, so a
+  throwing constructor registered through `advtn_source_map` can take down neither a log
+  line nor the Sources tab.
+
+  Each row also gets an **Ingest now** button beside **Test fetch**. Where Test fetch shows
+  what would be ingested and writes nothing, Ingest now calls `ADVTN_Ingest::run_source()`
+  directly, which bypasses that source's failure backoff by construction — the backoff
+  check lives in `run()`'s scheduling loop, not in `run_source()` — writes the result, and
+  finalizes unconditionally: rebuilding the selection and purging both the render cache and
+  the host's page cache, exactly like a full cycle would. A single-source retry is
+  therefore not a free action on a site sitting behind a page cache.
+
+### Fixed
+
+- **`http_timeout` never applied to `rss` sources.** `fetch_feed()` builds its own SimplePie
+  instance and WordPress never wires the setting to it, so an RSS source has always run on
+  SimplePie's own default timeout, not `http_timeout`, no matter what it was set to. Fixed
+  through the only hook that reaches the SimplePie object before it fetches,
+  `wp_feed_options`, added and removed around the call the same way the cache-lifetime
+  filter beside it already was.
+
 ## [1.1.4] — 2026-08-07
 
 ### Changed
