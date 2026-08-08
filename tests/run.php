@@ -300,6 +300,70 @@ $advtn_p20 = advtn_provider_with_timeout( 20 );
 advtn_assert_same( 20, $advtn_p20->config_timeout( array() ), 'timeout: the global is read per instance, not cached across them' );
 
 /* ---------------------------------------------------------------------- */
+/* Attempt ring                                                            */
+/* ---------------------------------------------------------------------- */
+
+$advtn_ring = array();
+for ( $advtn_i = 1; $advtn_i <= 25; $advtn_i++ ) {
+	$advtn_ring = ADVTN_Attempts::record( $advtn_ring, true, $advtn_i * 100, 200, '' );
+}
+
+advtn_assert_same( 20, count( $advtn_ring ), 'attempts: the ring caps at 20 entries' );
+advtn_assert_same( 600, $advtn_ring[0]['ms'], 'attempts: the oldest entries are dropped first' );
+advtn_assert_same( 2500, $advtn_ring[19]['ms'], 'attempts: the newest entry is last' );
+advtn_assert_same( true, $advtn_ring[19]['ok'], 'attempts: a success records ok true' );
+advtn_assert_same( '', $advtn_ring[19]['err'], 'attempts: a success records an empty error' );
+advtn_assert_same( 200, $advtn_ring[19]['code'], 'attempts: the http code is kept' );
+advtn_assert_same( true, isset( $advtn_ring[19]['t'] ) && 19 === strlen( (string) $advtn_ring[19]['t'] ), 'attempts: the timestamp is a UTC datetime string' );
+
+$advtn_long  = str_repeat( 'x', 400 );
+$advtn_fail  = ADVTN_Attempts::record( array(), false, 5006, null, $advtn_long );
+
+advtn_assert_same( false, $advtn_fail[0]['ok'], 'attempts: a failure records ok false' );
+advtn_assert_same( 5006, $advtn_fail[0]['ms'], 'attempts: a failure keeps its elapsed time' );
+advtn_assert_same( null, $advtn_fail[0]['code'], 'attempts: a null http code survives' );
+advtn_assert_same( 120, strlen( $advtn_fail[0]['err'] ), 'attempts: a long error truncates at write time' );
+
+advtn_assert_same(
+	array( 'count' => 0, 'p50' => 0, 'max' => 0 ),
+	ADVTN_Attempts::summary( array() ),
+	'attempts: an empty ring summarises to zeroes'
+);
+
+$advtn_odd = array();
+foreach ( array( 100, 300, 200 ) as $advtn_ms ) {
+	$advtn_odd = ADVTN_Attempts::record( $advtn_odd, true, $advtn_ms, 200, '' );
+}
+advtn_assert_same(
+	array( 'count' => 3, 'p50' => 200, 'max' => 300 ),
+	ADVTN_Attempts::summary( $advtn_odd ),
+	'attempts: an odd count takes the middle value'
+);
+
+$advtn_even = array();
+foreach ( array( 100, 400, 200, 300 ) as $advtn_ms ) {
+	$advtn_even = ADVTN_Attempts::record( $advtn_even, true, $advtn_ms, 200, '' );
+}
+advtn_assert_same(
+	array( 'count' => 4, 'p50' => 250, 'max' => 400 ),
+	ADVTN_Attempts::summary( $advtn_even ),
+	'attempts: an even count averages the two middle values'
+);
+
+$advtn_one = ADVTN_Attempts::record( array(), true, 2010, 200, '' );
+advtn_assert_same(
+	array( 'count' => 1, 'p50' => 2010, 'max' => 2010 ),
+	ADVTN_Attempts::summary( $advtn_one ),
+	'attempts: a single entry is its own median and max'
+);
+
+advtn_assert_same(
+	20,
+	count( ADVTN_Attempts::record( array_fill( 0, 400, array( 'ms' => 1 ) ), true, 50, 200, '' ) ),
+	'attempts: an oversized stored ring is trimmed on the next write'
+);
+
+/* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );
 

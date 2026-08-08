@@ -245,7 +245,9 @@ final class ADVTN_Ingest {
 			}
 		}
 
-		$now = gmdate( 'Y-m-d H:i:s' );
+		$now   = gmdate( 'Y-m-d H:i:s' );
+		$state = $this->settings->source_state( $source_id );
+
 		$this->settings->update_source_state(
 			$source_id,
 			array(
@@ -258,6 +260,13 @@ final class ADVTN_Ingest {
 				'items_new'     => $new,
 				'consec_fails'  => 0,
 				'backoff_until' => null,
+				'attempts'      => ADVTN_Attempts::record(
+					isset( $state['attempts'] ) && is_array( $state['attempts'] ) ? $state['attempts'] : array(),
+					true,
+					$result->duration_ms,
+					$result->http_code,
+					''
+				),
 			)
 		);
 
@@ -269,6 +278,7 @@ final class ADVTN_Ingest {
 				'items_seen'  => $seen,
 				'items_new'   => $new,
 				'duration_ms' => $result->duration_ms,
+				'timeout'     => $this->timeout_for( $source_id ),
 			)
 		);
 
@@ -449,6 +459,13 @@ final class ADVTN_Ingest {
 				'duration_ms'   => $result->duration_ms,
 				'consec_fails'  => $fails,
 				'backoff_until' => gmdate( 'Y-m-d H:i:s', time() + $backoff ),
+				'attempts'      => ADVTN_Attempts::record(
+					isset( $state['attempts'] ) && is_array( $state['attempts'] ) ? $state['attempts'] : array(),
+					false,
+					$result->duration_ms,
+					$result->http_code,
+					(string) $result->error
+				),
 			)
 		);
 
@@ -460,8 +477,31 @@ final class ADVTN_Ingest {
 				'error'        => $result->error,
 				'http_code'    => $result->http_code,
 				'consec_fails' => $fails,
+				'duration_ms'  => $result->duration_ms,
+				'timeout'      => $this->timeout_for( $source_id ),
 			)
 		);
+	}
+
+	/**
+	 * The timeout in force for one source, for logging.
+	 *
+	 * A timeout failure whose log entry does not name the setting that caused
+	 * it makes the operator go and look the number up. Returns the global when
+	 * the source or its provider cannot be resolved.
+	 *
+	 * @param string $source_id Source id.
+	 * @return int
+	 */
+	private function timeout_for( string $source_id ): int {
+		$config = $this->source_config( $source_id );
+		$source = null !== $config ? advtn()->source( (string) ( $config['type'] ?? '' ) ) : null;
+
+		if ( null === $config || ! $source instanceof ADVTN_Source_Base ) {
+			return $this->settings->get_int( 'http_timeout', 1, 60 );
+		}
+
+		return $source->config_timeout( $config );
 	}
 
 	/**
