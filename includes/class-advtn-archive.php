@@ -32,6 +32,17 @@ final class ADVTN_Archive {
 	private ADVTN_Repository $repository;
 
 	/**
+	 * Memoized items for the current page.
+	 *
+	 * prepare_response() and the template both need them, and the page number
+	 * cannot change once the main query is parsed — which is true of every
+	 * caller, all of which run on template_redirect or later.
+	 *
+	 * @var array<int,array<string,mixed>>|null
+	 */
+	private ?array $items = null;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param ADVTN_Settings   $settings   Settings service.
@@ -148,10 +159,16 @@ final class ADVTN_Archive {
 	 * @return array<int,array<string,mixed>>
 	 */
 	public function current_items(): array {
+		if ( null !== $this->items ) {
+			return $this->items;
+		}
+
 		$per_page = $this->settings->get_int( 'archive_per_page', 5, 200 );
 		$offset   = ( $this->current_page() - 1 ) * $per_page;
 
-		return $this->repository->archive_page( $per_page, $offset, $this->settings->max_age_cutoff() );
+		$this->items = $this->repository->archive_page( $per_page, $offset, $this->settings->max_age_cutoff() );
+
+		return $this->items;
 	}
 
 	/**
@@ -183,6 +200,17 @@ final class ADVTN_Archive {
 
 		$page = $this->current_page();
 		if ( $page > 1 && $page > $this->total_pages() ) {
+			wp_safe_redirect( $this->page_url( 1 ), 302 );
+			exit;
+		}
+
+		// The check above trusts a count that is cached for COUNT_TTL and
+		// derived from a cutoff that moves every second, so it can wave through
+		// a page that has nothing on it. Ask the rows themselves: an empty page
+		// past the first is never legitimate, and serving it 200 hands crawlers
+		// an indexable empty page. current_items() is memoized, so the template
+		// reuses this query rather than repeating it.
+		if ( $page > 1 && empty( $this->current_items() ) ) {
 			wp_safe_redirect( $this->page_url( 1 ), 302 );
 			exit;
 		}

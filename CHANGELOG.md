@@ -5,6 +5,33 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.6] — 2026-08-08
+
+### Fixed
+
+- **The archive paginated over a set it was no longer showing.** 1.1.5 made
+  `max_age_hours` bound `/trending/`, but the archive's item count is cached in a
+  transient for 15 minutes and nothing invalidated it when the underlying set changed. A
+  site with 2,500 retained rows and 350 inside the window offered 50 pages of which 7 had
+  anything on them, and the pages past the seventh returned `200` with an empty list —
+  `prepare_response()` could not redirect them, because it decides what is out of range by
+  reading the same stale number.
+
+  `ADVTN_Ingest::finalize()` now drops the count. It already marks rows stale, prunes them
+  and purges both the render cache and the host page cache; the count is derived from the
+  same rows and had simply been left out. That omission outlived its own TTL, because the
+  page cache purge re-primes the archive HTML on the next request and bakes whatever count
+  is current into pages that then live for the page cache's lifetime.
+
+  Two further guards, because a 15-minute cache over a window that moves every second will
+  always be slightly wrong at the edges: a page past the first that resolves to no rows now
+  redirects to page 1 rather than serving an empty page `200`, and the upgrade to database
+  version 3 clears any count cached by an earlier version instead of leaving it for the
+  first visitor to trip over.
+
+  `ADVTN_Archive::current_items()` is memoized so the new emptiness check costs no extra
+  query — an archive pageview still issues exactly one.
+
 ## [1.1.5] — 2026-08-08
 
 ### Changed

@@ -90,6 +90,16 @@ final class ADVTN_Schema {
 			self::retire_gdelt_sources();
 		}
 
+		if ( version_compare( $installed, '3', '<' ) ) {
+			// Before 1.1.6 the archive's cached count was the unfiltered row
+			// count, and nothing invalidated it when max_age_hours started
+			// narrowing the archive. A site upgrading with that value still in
+			// the cache would paginate over a set it no longer shows until the
+			// transient happened to expire. Drop it once, here, rather than
+			// making the first visitor after the upgrade see it.
+			delete_transient( 'advtn_archive_count' );
+		}
+
 		ADVTN_Logger::log( 'info', 'Schema upgraded.', array( 'from' => $installed, 'to' => ADVTN_DB_VERSION ) );
 	}
 

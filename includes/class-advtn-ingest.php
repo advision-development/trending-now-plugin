@@ -333,6 +333,19 @@ final class ADVTN_Ingest {
 
 			$selection = advtn()->selector()->build_and_commit();
 
+			// mark_stale() and prune() above have just changed the row set the
+			// archive's cached count is derived from, and max_age_hours narrows
+			// it further on every request. Leaving the count behind gives the
+			// archive a page count for a set that no longer exists: pagination
+			// offers pages that render nothing, and prepare_response() cannot
+			// redirect them because it is reading the same stale number.
+			//
+			// This matters more than the 15-minute TTL suggests. The page cache
+			// purge below re-primes the archive HTML on the next request, baking
+			// whatever count is current into pages that then live for the page
+			// cache's own lifetime.
+			delete_transient( 'advtn_archive_count' );
+
 			advtn()->renderer()->purge_cache();
 
 			// A full-page cache holds the finished HTML and knows nothing about
