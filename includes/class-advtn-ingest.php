@@ -303,9 +303,25 @@ final class ADVTN_Ingest {
 	/**
 	 * Prune, mark stale, rebuild the selection, refresh caches, unlock.
 	 *
+	 * @param bool $complete_cycle Whether this run concludes a whole cycle, and
+	 *                             so may stamp `advtn_last_ingest`. That option
+	 *                             is the "every source was refreshed" clock, and
+	 *                             three things read it: is_due() defers the next
+	 *                             scheduled cycle from it, the admin's 30-hour
+	 *                             red banner reads it, and /status reports it for
+	 *                             monitoring to alert on. Passing false does
+	 *                             everything else this method does — release the
+	 *                             lock, mark stale, prune, rebuild the selection,
+	 *                             purge the render and page caches — but leaves
+	 *                             that timestamp alone. The single-source "Ingest
+	 *                             now" button passes false: refreshing one source
+	 *                             is not a completed cycle, and stamping it there
+	 *                             would defer every *other* source by up to
+	 *                             ingest_interval_hours and reset the alert that
+	 *                             says ingestion has stopped.
 	 * @return void
 	 */
-	public function finalize(): void {
+	public function finalize( bool $complete_cycle = true ): void {
 		try {
 			$stale = $this->repository->mark_stale( 7 );
 
@@ -328,7 +344,10 @@ final class ADVTN_Ingest {
 				advtn()->rest()->rebuild_items_cache();
 			}
 
-			update_option( self::OPTION_LAST_INGEST, gmdate( 'Y-m-d H:i:s' ), false );
+			if ( $complete_cycle ) {
+				update_option( self::OPTION_LAST_INGEST, gmdate( 'Y-m-d H:i:s' ), false );
+			}
+
 			$this->settings->prune_state();
 
 			ADVTN_Logger::log(
@@ -338,6 +357,7 @@ final class ADVTN_Ingest {
 					'marked_stale'   => $stale,
 					'pruned'         => $deleted,
 					'selection_size' => count( $selection ),
+					'complete_cycle' => $complete_cycle,
 				)
 			);
 		} catch ( \Throwable $e ) {
@@ -505,13 +525,15 @@ final class ADVTN_Ingest {
 		// try/catch. A third-party provider registered through advtn_source_map
 		// can have a constructor that throws, and one bad source must never
 		// abort a cycle — so resolving the provider must not be able to.
+		// config_timeout() is inside the try for the same reason: it is public
+		// and not final, so an override can throw just as readily.
 		try {
 			$source = advtn()->source( (string) ( $config['type'] ?? '' ) );
+
+			return $source instanceof ADVTN_Source_Base ? $source->config_timeout( $config ) : $fallback;
 		} catch ( \Throwable $e ) {
 			return $fallback;
 		}
-
-		return $source instanceof ADVTN_Source_Base ? $source->config_timeout( $config ) : $fallback;
 	}
 
 	/**

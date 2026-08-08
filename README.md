@@ -126,12 +126,20 @@ summary line of count, median (`p50`) and max duration next to the timeout curre
 force. This is what turns "it failed once, three weeks ago" into "it has been drifting
 toward its timeout for the last six hours."
 
-**Test fetch** versus **Ingest now.** Every row has both, side by side. **Test fetch** runs
-the fetch and shows the first three normalized items, timing and HTTP status — it writes
-nothing. **Ingest now** writes: it fetches that one source for real, upserts whatever it
-finds, rebuilds the selection and purges caches, exactly like a normal cycle but for a
-single source. It also ignores that source's failure backoff, which is the point of
-pressing it on a source that has been failing — see [Troubleshooting](#troubleshooting).
+**Test fetch** versus **Ingest now.** Every saved, enabled row has both, side by side.
+**Test fetch** runs the fetch and shows the first three normalized items, timing and HTTP
+status — it writes nothing. **Ingest now** writes: it fetches that one source for real,
+upserts whatever it finds, rebuilds the selection and purges caches, exactly like a normal
+cycle but for a single source. It also ignores that source's failure backoff, which is the
+point of pressing it on a source that has been failing — see
+[Troubleshooting](#troubleshooting).
+
+The two read different things. Test fetch uses whatever is on screen, saved or not; **Ingest
+now uses the saved row**, because it goes through the stored configuration. Change a field
+and you must save before the retry will use it — the button leaves the page, so the admin
+confirms first rather than silently discarding the edit. Ingest now is also *not* a
+completed cycle: it does not update `last_ingest`, so it neither defers the next scheduled
+run of your other sources nor clears the stale-ingest banner.
 
 A SerpAPI source runs in one of two modes. **Top stories** is Google News' mainstream
 front page for the country and language you pick — no query needed, and the usual source
@@ -380,7 +388,14 @@ Requests are rejected outside a 300-second clock skew, replayed signatures are r
 | `GET /status` | Everything on the Diagnostics panel, as JSON. | `200` · `401` auth |
 
 `force: true` bypasses the due-check but never the lock. Point your monitoring at
-`/status` and alert on `last_ingest` older than 30 hours.
+`/status` and alert on `last_ingest` older than 30 hours. A row's own **Ingest now** button
+deliberately does not touch `last_ingest` — only a whole cycle does — so the alert keeps
+firing while an operator retries one source.
+
+`/status` returns each source's full runtime state, which since the attempt ring includes
+its last 20 attempts. Budget roughly 5 KB per source rather than a fixed few hundred bytes:
+a 30-source install answers with about 150 KB. It is HMAC-signed and not public, but poll it
+on a sane interval and do not log the body wholesale.
 
 ## Admin reference
 
@@ -632,9 +647,11 @@ enabled one, use its row's own **Ingest now** button on the Sources tab.
 **A source times out intermittently.** `cURL error 28` names the ceiling it hit — "timed
 out after 5001 milliseconds" is the 5-second `http_timeout` default, not a network fault.
 Open that source's **Recent attempts** on the Sources tab: if p50 has been climbing toward
-the timeout, raise that row's **Timeout** rather than the global. SerpAPI does a live
-scrape and can exceed 5 seconds under load; 20–30 is a reasonable value for it. Owned
-`wp_rest` sources should keep failing fast.
+the timeout, raise that row's **Timeout** rather than the global, **save the form**, and
+only then press **Ingest now** — it runs against the saved row, so retrying before saving
+repeats the fetch at the old timeout. SerpAPI does a live scrape and can exceed 5 seconds
+under load; 20–30 is a reasonable value for it. Owned `wp_rest` sources should keep failing
+fast.
 
 **The widget and the archive show different sets.** Almost always a full-page cache
 holding two snapshots taken at different times — the homepage cached after an ingest

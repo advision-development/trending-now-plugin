@@ -81,12 +81,18 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 
 			<label>
 				<span><?php esc_html_e( 'Timeout (seconds)', 'trending-now' ); ?></span>
+				<?php
+				// Empty rather than 0 when the global is inherited: a number input
+				// with a value never shows its placeholder, so a literal 0 would
+				// hide the "global (n)" hint the copy below points at. An empty
+				// submission casts to 0 and clamps identically.
+				?>
 				<input
 					type="number"
 					min="0"
 					max="120"
 					name="sources[<?php echo esc_attr( (string) $index ); ?>][timeout]"
-					value="<?php echo esc_attr( (string) ( $source['timeout'] ?? 0 ) ); ?>"
+					value="<?php echo esc_attr( empty( $source['timeout'] ) ? '' : (string) (int) $source['timeout'] ); ?>"
 					placeholder="<?php echo esc_attr( sprintf( /* translators: %d: global timeout in seconds. */ __( 'global (%d)', 'trending-now' ), advtn()->settings()->get_int( 'http_timeout', 1, 60 ) ) ); ?>"
 				/>
 				<em><?php esc_html_e( 'Blank or 0 uses the global setting. Raise it for a slow provider — SerpAPI does a live scrape and can exceed the 5s default under load.', 'trending-now' ); ?></em>
@@ -145,14 +151,19 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 		$advtn_attempts = isset( $state['attempts'] ) && is_array( $state['attempts'] ) ? $state['attempts'] : array();
 		if ( ! empty( $advtn_attempts ) ) :
 			$advtn_stats = ADVTN_Attempts::summary( $advtn_attempts );
+
+			// A provider registered through advtn_source_map can throw from its
+			// constructor, and config_timeout() is public and not final, so an
+			// override can throw too. Neither may take the Sources tab down, so
+			// both calls sit inside the try.
 			try {
-				$advtn_source = advtn()->source( (string) ( $source['type'] ?? '' ) );
+				$advtn_source  = advtn()->source( (string) ( $source['type'] ?? '' ) );
+				$advtn_ceiling = $advtn_source instanceof ADVTN_Source_Base
+					? $advtn_source->config_timeout( $source )
+					: advtn()->settings()->get_int( 'http_timeout', 1, 60 );
 			} catch ( \Throwable $e ) {
-				$advtn_source = null;
+				$advtn_ceiling = advtn()->settings()->get_int( 'http_timeout', 1, 60 );
 			}
-			$advtn_ceiling = $advtn_source instanceof ADVTN_Source_Base
-				? $advtn_source->config_timeout( $source )
-				: advtn()->settings()->get_int( 'http_timeout', 1, 60 );
 			?>
 			<details class="advtn-attempts">
 				<summary>
@@ -187,7 +198,13 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 
 		<div class="advtn-source__foot">
 			<button type="button" class="button advtn-test"><?php esc_html_e( 'Test fetch', 'trending-now' ); ?></button>
-			<?php if ( ! empty( $source['id'] ) ) : ?>
+			<?php
+			// Hidden on a disabled row. source_config() resolves any row, enabled
+			// or not, so the button would happily upsert a disabled source's
+			// items into the live selection. Test fetch is the write-nothing
+			// option; this one writes.
+			if ( ! empty( $source['id'] ) && ! empty( $source['enabled'] ) ) :
+				?>
 				<a
 					class="button advtn-ingest-now"
 					href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=advtn_ingest_source&source=' . rawurlencode( (string) $source['id'] ) ), 'advtn_ingest_source' ) ); ?>"
@@ -197,7 +214,7 @@ $advtn_render_row = static function ( array $source, int $index, array $state = 
 			<?php if ( ! empty( $state['last_error'] ) ) : ?>
 				<span class="advtn-source__error"><?php echo esc_html( (string) $state['last_error'] ); ?></span>
 			<?php endif; ?>
-			<em class="advtn-ingest-now__hint"><?php esc_html_e( 'Test fetch shows what would be ingested. Ingest now writes it, rebuilds the list and purges caches.', 'trending-now' ); ?></em>
+			<em class="advtn-ingest-now__hint"><?php esc_html_e( 'Test fetch shows what would be ingested. Ingest now writes it, rebuilds the list and purges caches. Test fetch runs against whatever is on screen; Ingest now uses the saved configuration, so save first if you have just changed a field on this row.', 'trending-now' ); ?></em>
 		</div>
 
 		<div class="advtn-test-result" hidden></div>

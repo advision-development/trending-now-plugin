@@ -369,4 +369,64 @@
 			} );
 		} );
 	} );
+
+	/* ----------------------------------------------------------------- */
+	/* Ingest now: do not navigate away from unsaved row edits            */
+	/* ----------------------------------------------------------------- */
+
+	/**
+	 * A comparable snapshot of every field in a form.
+	 *
+	 * Fields inside a <template> live in an inert fragment, so querySelectorAll
+	 * never sees them and the blank row template cannot register as an edit.
+	 * Rows added or reordered after load do change the snapshot, which is
+	 * correct: those are unsaved changes too.
+	 */
+	function snapshot( form ) {
+		var parts = [];
+
+		Array.prototype.forEach.call(
+			form.querySelectorAll( 'input, select, textarea' ),
+			function ( field ) {
+				var value =
+					field.type === 'checkbox' || field.type === 'radio'
+						? ( field.checked ? '1' : '0' )
+						: field.value;
+
+				parts.push( ( field.name || '' ) + '=' + value );
+			}
+		);
+
+		return parts.join( '\n' );
+	}
+
+	function initIngestGuard() {
+		var form = document.getElementById( 'advtn-sources-form' );
+		if ( ! form ) {
+			return;
+		}
+
+		// Taken after the main ready() callback has reindexed the order fields,
+		// so a freshly loaded form is never already dirty.
+		var initial = snapshot( form );
+
+		// Ingest now is an <a> inside the form: it navigates rather than
+		// submitting, so unsaved edits are dropped and the fetch runs against
+		// the stored row. Compare rather than tracking an input event, so the
+		// prompt appears only when a value really differs — typing a digit and
+		// deleting it again is not a change.
+		form.addEventListener( 'click', function ( event ) {
+			var link = event.target.closest( '.advtn-ingest-now' );
+
+			if ( ! link || snapshot( form ) === initial ) {
+				return;
+			}
+
+			if ( ! window.confirm( settings.i18n.unsaved || 'This form has unsaved changes. Continue?' ) ) {
+				event.preventDefault();
+			}
+		} );
+	}
+
+	ready( initIngestGuard );
 } )();

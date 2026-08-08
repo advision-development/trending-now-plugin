@@ -629,12 +629,40 @@ not `run()` — for that one source id, writes the result, and then calls `final
 unconditionally regardless of whether the fetch succeeded. Calling `run_source()` directly
 is what makes this a retry rather than a request to wait: the failure-backoff check lives in
 `run()`'s scheduling loop, so a source parked in `backoff_until` is fetched anyway, on
-purpose. `finalize()` takes the lock, rebuilds the selection, purges the render cache and
-purges the host's full-page cache, exactly as an ordinary cycle does — a single-source retry
-is therefore not a free operation on a site sitting behind a page cache. If the lock is
-already held, the button shows the same "locked" notice every other locked action in this
-admin uses, rather than a bespoke message naming the age for one button; the age itself is
-on the Diagnostics tab (`ADVTN_Lock::age()`) for the operator who needs the number.
+purpose. `finalize()` marks stale rows, prunes, rebuilds the selection, purges the render
+cache, purges the host's full-page cache, stamps `advtn_last_ingest` and releases the lock —
+so a single-source retry is not a free operation on a site sitting behind a page cache.
+
+Every one of those steps is wanted here **except the stamp**. `finalize()` therefore takes a
+`bool $complete_cycle = true` parameter gating only the `advtn_last_ingest` write, and the
+button's handler passes `false`. That option is the "every source was refreshed" clock and
+three things read it: the due-check defers the next scheduled cycle from it (§6.2), the
+admin's stale-ingest banner turns red 30 hours past it (§12.3), and `GET /status` reports it
+as `last_ingest` for external monitoring to alert on (§10). Stamping it from a one-source
+retry would defer every *other* source's scheduled run by up to `ingest_interval_hours`,
+suppress the `{"force":false}` external trigger for the same window, reset the banner and
+reset the monitored value — making the button an operator presses *because* a source is
+failing the thing that hides ingestion having stopped. Every other caller —
+`ADVTN_Ingest::run_now()`, the `advtn_finalize_cycle` scheduled action and the WP-CLI
+`ingest --sync` path — takes the default, because each of those really does conclude a
+cycle.
+
+Note that a single-source finalize still runs `ADVTN_Selector::build_and_commit()`, which
+stamps `times_shown`. Suppressing that would need a non-stamping variant of the selector's
+commit; the counters are deliberately left alone here rather than growing a second commit
+path (§7.3).
+
+If the lock is already held, the button shows the same "locked" notice every other locked
+action in this admin uses, rather than a bespoke message naming the age for one button; the
+age itself is on the Diagnostics tab (`ADVTN_Lock::age()`) for the operator who needs the
+number.
+
+The button is rendered only on a **saved, enabled** row. `source_config()` resolves any
+configured row, enabled or not, so offering it on a disabled source would let one press
+upsert that source's items into the live selection — and the button that writes is the wrong
+one to offer for a source the operator has switched off. It also runs against the *stored*
+row rather than the on-screen one, the opposite of **Test fetch**, so the row's hint says so
+and the admin JS confirms before navigating away from an edited form.
 
 ---
 
@@ -893,9 +921,14 @@ useful thing in the admin.
 
 A row with attempt history shows a **Recent attempts** disclosure: count, `p50`, max (all
 ms) and the timeout currently in force, expanding to the individual entries newest first
-(§6.8). Beside "Test fetch" sits **Ingest now**, a per-row retry that writes, bypasses
-failure backoff and finalizes unconditionally — see §6.8 for how it differs from "Test
-fetch" and from Diagnostics' "Run ingest now" (§12.3), which runs every enabled source.
+(§6.8). Beside "Test fetch" sits **Ingest now**, shown only on a saved, enabled row: a
+per-row retry that writes, bypasses failure backoff and finalizes without stamping
+`advtn_last_ingest` — see §6.8 for how it differs from "Test fetch" and from Diagnostics'
+"Run ingest now" (§12.3), which runs every enabled source.
+
+The row's timeout field renders empty rather than `0` when the global is inherited, so the
+`global (n)` placeholder is actually reachable — a number input with a value never shows
+one. An empty submission casts to 0 and clamps identically.
 
 ### 12.3 Diagnostics — build this properly
 

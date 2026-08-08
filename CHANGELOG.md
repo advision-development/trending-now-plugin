@@ -38,13 +38,30 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   throwing constructor registered through `advtn_source_map` can take down neither a log
   line nor the Sources tab.
 
-  Each row also gets an **Ingest now** button beside **Test fetch**. Where Test fetch shows
-  what would be ingested and writes nothing, Ingest now calls `ADVTN_Ingest::run_source()`
-  directly, which bypasses that source's failure backoff by construction — the backoff
-  check lives in `run()`'s scheduling loop, not in `run_source()` — writes the result, and
-  finalizes unconditionally: rebuilding the selection and purging both the render cache and
-  the host's page cache, exactly like a full cycle would. A single-source retry is
-  therefore not a free action on a site sitting behind a page cache.
+  Each enabled row also gets an **Ingest now** button beside **Test fetch**. Where Test
+  fetch shows what would be ingested and writes nothing, Ingest now calls
+  `ADVTN_Ingest::run_source()` directly, which bypasses that source's failure backoff by
+  construction — the backoff check lives in `run()`'s scheduling loop, not in
+  `run_source()` — writes the result, and finalizes whether or not the fetch succeeded:
+  rebuilding the selection and purging both the render cache and the host's page cache,
+  exactly like a full cycle would. A single-source retry is therefore not a free action on
+  a site sitting behind a page cache.
+
+  It does **not** stamp `advtn_last_ingest`. `ADVTN_Ingest::finalize()` takes a
+  `bool $complete_cycle = true` parameter gating that one write, and the button's handler
+  passes `false`; every other caller takes the default. Refreshing one source is not a
+  completed cycle, and three things read that option — the due-check that defers the next
+  scheduled cycle and the `{"force":false}` external trigger, the admin's 30-hour red
+  banner, and `last_ingest` in `GET /status`. Stamping it from a one-source retry would
+  make the button an operator presses *because* a source is failing the very thing that
+  hides ingestion having stopped, for up to `ingest_interval_hours`.
+
+  The button is hidden on a disabled row — `source_config()` resolves any configured row,
+  so it would otherwise write a switched-off source's items into the live selection — and
+  it runs against the **saved** row rather than what is on screen, the opposite of Test
+  fetch. The row hint says so, and because the control is a link inside the sources form,
+  the admin JS now confirms before navigating away from unsaved edits rather than
+  discarding a timeout you have just typed.
 
 ### Fixed
 

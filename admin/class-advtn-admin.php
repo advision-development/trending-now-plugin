@@ -111,6 +111,7 @@ final class ADVTN_Admin {
 					'confirm'   => __( 'Are you sure?', 'trending-now' ),
 					'replace'   => __( 'Replace discards every source currently configured on this site. Continue?', 'trending-now' ),
 					'deleteAll' => __( 'This empties the entire items table. Sources and settings are kept, but every stored article and its display history is gone. Continue?', 'trending-now' ),
+					'unsaved'   => __( 'This form has unsaved changes. Ingest now leaves the page and runs against the saved configuration, so those edits are discarded and will not affect the fetch. Continue?', 'trending-now' ),
 				),
 			)
 		);
@@ -520,6 +521,13 @@ final class ADVTN_Admin {
 	 * branching on success would add a second path for no gain. It also
 	 * releases the lock, which is why it sits in the finally.
 	 *
+	 * It is passed $complete_cycle = false, though. Refreshing one source is not
+	 * a completed cycle, and stamping `advtn_last_ingest` here would defer the
+	 * next scheduled run of every *other* source by up to ingest_interval_hours,
+	 * reset the 30-hour stale-ingest banner and reset the `last_ingest` value
+	 * monitoring alerts on — so the button an operator presses because a source
+	 * is failing would be the thing that hides ingestion having stopped.
+	 *
 	 * @return void
 	 */
 	public function handle_ingest_source(): void {
@@ -556,8 +564,9 @@ final class ADVTN_Admin {
 				)
 			);
 		} finally {
-			// Releases the lock, rebuilds the selection and busts the caches.
-			advtn()->ingest()->finalize();
+			// Releases the lock, rebuilds the selection and busts the caches —
+			// but does not stamp advtn_last_ingest. See the docblock.
+			advtn()->ingest()->finalize( false );
 		}
 
 		$this->redirect( 'sources', $notice );
@@ -1011,7 +1020,10 @@ final class ADVTN_Admin {
 			'filter_required'       => array( 'warning', __( 'Narrow the list with a filter first — use "Delete everything" if you really mean all of it.', 'trending-now' ) ),
 			'import_failed'         => array( 'error', __( 'Import failed. Nothing was changed.', 'trending-now' ) ),
 			'ingest_source_done'    => array( 'success', __( 'Source ingested. The list has been rebuilt and caches purged.', 'trending-now' ) ),
-			'ingest_source_failed'  => array( 'error', __( 'That source failed to ingest. Its recent attempts are listed on its row.', 'trending-now' ) ),
+			// Deliberately does not promise a row: a source id that never
+			// existed, or one deleted between the page rendering and the click,
+			// lands here too.
+			'ingest_source_failed'  => array( 'error', __( 'That source did not ingest. If its row is still listed below, its recent attempts show why; otherwise check the log on the Diagnostics tab.', 'trending-now' ) ),
 			'ingest_source_unknown' => array( 'error', __( 'No such source.', 'trending-now' ) ),
 		);
 

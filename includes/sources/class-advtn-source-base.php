@@ -124,6 +124,11 @@ abstract class ADVTN_Source_Base implements ADVTN_Source_Interface {
 	 * 60 on purpose: the global is a blunt default applied to every source,
 	 * where a per-row override is a considered choice about one provider.
 	 *
+	 * Governs the *request* timeout only. http_get() computes the connect
+	 * ceiling from the global `http_timeout` before the merge that lets a caller
+	 * override the request timeout, so a row set to 120 still fails fast on a
+	 * stalled TLS handshake — deliberately.
+	 *
 	 * Public rather than protected so it can be exercised directly.
 	 *
 	 * @param array<string,mixed> $config Source config row.
