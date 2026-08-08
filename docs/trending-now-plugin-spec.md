@@ -642,10 +642,16 @@ as `last_ingest` for external monitoring to alert on (§10). Stamping it from a 
 retry would defer every *other* source's scheduled run by up to `ingest_interval_hours`,
 suppress the `{"force":false}` external trigger for the same window, reset the banner and
 reset the monitored value — making the button an operator presses *because* a source is
-failing the thing that hides ingestion having stopped. Every other caller —
-`ADVTN_Ingest::run_now()`, the `advtn_finalize_cycle` scheduled action and the WP-CLI
-`ingest --sync` path — takes the default, because each of those really does conclude a
-cycle.
+failing the thing that hides ingestion having stopped. `ADVTN_Ingest::run_now()` and the
+`advtn_finalize_cycle` scheduled action take the default, because each of those really
+does conclude a cycle.
+
+The WP-CLI `ingest --sync` path decides the same way the admin does, from the same
+question: `finalize( null === $only_source )`. A bare `--sync` concludes a cycle and
+stamps; `--sync --source=<id>` is the CLI spelling of the admin button and must not. The
+two entry points to a single-source ingest have to agree, or the operator who reaches for
+a shell gets a different outcome from the one who reaches for the button — and the whole
+point of the timestamp is that it means one thing.
 
 Note that a single-source finalize still runs `ADVTN_Selector::build_and_commit()`, which
 stamps `times_shown`. Suppressing that would need a non-stamping variant of the selector's

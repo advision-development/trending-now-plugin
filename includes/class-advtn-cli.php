@@ -261,8 +261,12 @@ final class ADVTN_CLI {
 			}
 		}
 
-		$ingest->finalize();
+		// A --source run ingests one source, so it must not stamp the
+		// whole-cycle timestamp: doing so would defer every other source's
+		// scheduled run, exactly as it did from the admin button before
+		// finalize() learned to tell the two apart.
+		$ingest->finalize( null === $only_source );
 
-		WP_CLI::success( 'Cycle complete.' );
+		WP_CLI::success( null === $only_source ? 'Cycle complete.' : 'Source complete.' );
 	}
 }
