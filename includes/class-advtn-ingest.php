@@ -494,14 +494,24 @@ final class ADVTN_Ingest {
 	 * @return int
 	 */
 	private function timeout_for( string $source_id ): int {
-		$config = $this->source_config( $source_id );
-		$source = null !== $config ? advtn()->source( (string) ( $config['type'] ?? '' ) ) : null;
+		$fallback = $this->settings->get_int( 'http_timeout', 1, 60 );
+		$config   = $this->source_config( $source_id );
 
-		if ( null === $config || ! $source instanceof ADVTN_Source_Base ) {
-			return $this->settings->get_int( 'http_timeout', 1, 60 );
+		if ( null === $config ) {
+			return $fallback;
 		}
 
-		return $source->config_timeout( $config );
+		// This runs inside record_failure(), which sits outside run_source()'s
+		// try/catch. A third-party provider registered through advtn_source_map
+		// can have a constructor that throws, and one bad source must never
+		// abort a cycle — so resolving the provider must not be able to.
+		try {
+			$source = advtn()->source( (string) ( $config['type'] ?? '' ) );
+		} catch ( \Throwable $e ) {
+			return $fallback;
+		}
+
+		return $source instanceof ADVTN_Source_Base ? $source->config_timeout( $config ) : $fallback;
 	}
 
 	/**

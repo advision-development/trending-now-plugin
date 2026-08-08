@@ -325,6 +325,12 @@ advtn_assert_same( null, $advtn_fail[0]['code'], 'attempts: a null http code sur
 advtn_assert_same( 120, strlen( $advtn_fail[0]['err'] ), 'attempts: a long error truncates at write time' );
 
 advtn_assert_same(
+	0,
+	ADVTN_Attempts::record( array(), true, -5, 200, '' )[0]['ms'],
+	'attempts: a negative elapsed time clamps to zero'
+);
+
+advtn_assert_same(
 	array( 'count' => 0, 'p50' => 0, 'max' => 0 ),
 	ADVTN_Attempts::summary( array() ),
 	'attempts: an empty ring summarises to zeroes'
