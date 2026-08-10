@@ -20,10 +20,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `/archive` and `/archive/` but not `/archive/page/2/` or `/archive-2024`. A prefix match
   was rejected because one list entry would then silently swallow an entire section; a
   trailing `*` is the additive way in if section-wide matching is ever wanted. The shortcode
-  accepts both `match_path` and `matchpath`, because `shortcode_atts()` lowercases attribute
-  names before matching them against its defaults — a `match_path`-only implementation would
-  have silently dropped the documented `matchPath` spelling the moment anyone typed it with
-  a capital P.
+  accepts both `match_path` and `matchpath`, because `shortcode_parse_atts()` lowercases the
+  attribute name while parsing the tag, before `shortcode_atts()` ever gets to merge it
+  against defaults — a `match_path`-only implementation would have silently dropped the
+  documented `matchPath` spelling the moment anyone typed it with a capital P, since
+  `shortcode_atts()` would receive `matchpath` and find no default under that key.
 
   The gate lives in `ADVTN_Shortcode` and `ADVTN_Block`, not in `ADVTN_Renderer`: `render()`
   keys its cache on the args hash, and a path list folded into `$args` would mint one cached
@@ -33,14 +34,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
   The block's editor preview bypasses the gate, because `wp-server-side-render` calls the
   render callback over REST carrying the *editor's* own URL, not the reader's — gating there
-  would render the block blank while it is being edited and read as broken. That bypass was
-  first scoped to `REST_REQUEST` alone, which stays true for the life of any `/wp-json/*`
-  request, not just the editor's preview call: an anonymous `GET /wp/v2/pages/<id>` also
-  qualified, handing that page's rendered block to anyone who asked, regardless of
-  `matchPath`. It now also requires `current_user_can( 'edit_posts' )`, which the
-  block-renderer endpoint the editor's preview calls already enforces in its own permission
-  callback, so the real preview is unaffected. One accepted gap: a logged-in editor browsing
-  the public REST API still bypasses the gate, for content they can already edit.
+  would render the block blank while it is being edited and read as broken. The bypass
+  requires `current_user_can( 'edit_posts' )` alongside `REST_REQUEST`, because `REST_REQUEST`
+  alone stays true for the life of any `/wp-json/*` request, not just the editor's preview
+  call: an anonymous `GET /wp/v2/pages/<id>` also qualifies, and would otherwise hand back
+  that page's rendered block regardless of `matchPath`. The added capability check costs
+  nothing for a genuine preview, because the block-renderer endpoint the editor's preview
+  calls already enforces it in its own permission callback. One accepted gap: a logged-in
+  editor browsing the public REST API still bypasses the gate, for content they can already
+  edit.
 
 ## [1.1.6] — 2026-08-08
 

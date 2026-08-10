@@ -760,7 +760,7 @@ All three call the same `ADVTN_Renderer::render( array $args ): string`.
 
 **Template tag** — `advtn_render( array $args = [] )` echoes; `advtn_get_html( array $args = [] )` returns. For direct theme placement.
 
-**Path gating** — an optional `match_path` (shortcode; `matchpath` is also accepted, since `shortcode_atts()` lowercases attribute names before matching them against defaults — the block's `matchPath` needs no such fallback, because JS object keys are not lowercased) or `matchPath` (block) attribute limits a placement to a comma-separated list of paths, so a placement dropped into a site-wide widget area can be pinned to `/` and nowhere else. An empty or absent value renders everywhere — unchanged from every install that predates this attribute.
+**Path gating** — an optional `match_path` (shortcode; `matchpath` is also accepted, because `shortcode_parse_atts()` lowercases the attribute name while parsing the tag, before `shortcode_atts()` ever merges it against defaults — the block's `matchPath` needs no such fallback, since JS object keys are not lowercased) or `matchPath` (block) attribute limits a placement to a comma-separated list of paths, so a placement dropped into a site-wide widget area can be pinned to `/` and nowhere else. An empty or absent value renders everywhere — unchanged from every install that predates this attribute.
 
 Matching, via `ADVTN_Path_Match`, is **exact rather than prefix**: `/archive` matches `/archive` and `/archive/` but not `/archive/page/2/` or `/archive-2024`. A prefix match was rejected because it would let one list entry silently swallow an entire section; a trailing `*` is the additive way in if section-wide matching is ever wanted.
 
