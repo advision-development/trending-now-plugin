@@ -78,6 +78,16 @@ final class ADVTN_Block {
 	 * @return string
 	 */
 	public function render( array $attributes = array() ): string {
+		// The block previews through wp-server-side-render, which reaches this
+		// callback over REST carrying the editor's own URL — so gating there
+		// would render the block blank while it is being edited and read as
+		// broken. Front end only.
+		$advtn_editing = ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || is_admin();
+
+		if ( ! $advtn_editing && ! ADVTN_Path_Match::matches( (string) ( $attributes['matchPath'] ?? '' ) ) ) {
+			return '';
+		}
+
 		$args = array(
 			'show_see_all' => ! isset( $attributes['showSeeAll'] ) || (bool) $attributes['showSeeAll'],
 		);

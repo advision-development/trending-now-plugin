@@ -46,6 +46,9 @@
 		"showSeeAll": {
 			"type": "boolean",
 			"default": true
+		},
+		"matchPath": {
+			"type": "string"
 		}
 	}
 }

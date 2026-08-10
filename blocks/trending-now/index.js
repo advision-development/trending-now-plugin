@@ -79,6 +79,12 @@
 							label: __( 'Show "see all" link', 'trending-now' ),
 							checked: !! attributes.showSeeAll,
 							onChange: set( 'showSeeAll' ),
+						} ),
+						el( TextControl, {
+							label: __( 'Only show on these paths', 'trending-now' ),
+							value: attributes.matchPath || '',
+							onChange: set( 'matchPath' ),
+							help: __( 'Comma-separated, e.g. /,/archive. Leave empty to show everywhere. Matching is exact, so /archive does not cover /archive/page/2/.', 'trending-now' ),
 						} )
 					)
 				),
