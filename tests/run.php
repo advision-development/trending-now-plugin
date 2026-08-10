@@ -423,6 +423,68 @@ advtn_assert_same(
 );
 
 /* ---------------------------------------------------------------------- */
+/* Path matching                                                           */
+/* ---------------------------------------------------------------------- */
+
+advtn_assert_same( '/', ADVTN_Path_Match::normalize( '/' ), 'path normalize: root stays root' );
+advtn_assert_same( '/', ADVTN_Path_Match::normalize( '//' ), 'path normalize: repeated slashes reduce to root' );
+advtn_assert_same( '', ADVTN_Path_Match::normalize( '' ), 'path normalize: empty stays empty, it is NOT the root' );
+advtn_assert_same( '', ADVTN_Path_Match::normalize( '   ' ), 'path normalize: whitespace-only is empty' );
+advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( '/archive' ), 'path normalize: a plain path is unchanged' );
+advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( '/archive/' ), 'path normalize: a trailing slash is dropped' );
+advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( 'archive' ), 'path normalize: a leading slash is added' );
+advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( ' /archive/ ' ), 'path normalize: surrounding whitespace is trimmed' );
+advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( '/Archive' ), 'path normalize: lowercased' );
+advtn_assert_same( '/', ADVTN_Path_Match::normalize( '/?utm_source=x' ), 'path normalize: the query string is not part of the path' );
+advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( '/archive?page=2' ), 'path normalize: query dropped from a deeper path' );
+advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( '/archive#top' ), 'path normalize: the fragment is dropped' );
+advtn_assert_same( '/my page', ADVTN_Path_Match::normalize( '/my%20page' ), 'path normalize: percent-encoding is decoded' );
+advtn_assert_same( '/a/b', ADVTN_Path_Match::normalize( '/a//b/' ), 'path normalize: interior repeated slashes collapse' );
+
+advtn_assert_same( '/archive', ADVTN_Path_Match::path_from( '/archive', '/' ), 'path from: a root install passes the path through' );
+advtn_assert_same( '/archive', ADVTN_Path_Match::path_from( '/archive/', '' ), 'path from: an empty base is treated as root' );
+advtn_assert_same( '/', ADVTN_Path_Match::path_from( '/', '/' ), 'path from: the root of a root install is the root' );
+advtn_assert_same( '/', ADVTN_Path_Match::path_from( '/blog/', '/blog' ), 'path from: the root of a subdirectory install is the root' );
+advtn_assert_same( '/', ADVTN_Path_Match::path_from( '/blog', '/blog/' ), 'path from: base and request agree regardless of trailing slashes' );
+advtn_assert_same( '/archive', ADVTN_Path_Match::path_from( '/blog/archive', '/blog' ), 'path from: the base is stripped from a deeper path' );
+advtn_assert_same( '/archive/page/2', ADVTN_Path_Match::path_from( '/blog/archive/page/2/', '/blog' ), 'path from: the base is stripped from a deep path' );
+advtn_assert_same( '/blogging', ADVTN_Path_Match::path_from( '/blogging', '/blog' ), 'path from: a base is only stripped at a segment boundary' );
+advtn_assert_same( '', ADVTN_Path_Match::path_from( '', '/blog' ), 'path from: no request path yields no path' );
+
+advtn_assert_same( true, ADVTN_Path_Match::matches_path( '/anything', '' ), 'path matches: an empty list gates nothing' );
+advtn_assert_same( true, ADVTN_Path_Match::matches_path( '/anything', '  ' ), 'path matches: a whitespace list gates nothing' );
+advtn_assert_same( true, ADVTN_Path_Match::matches_path( '/anything', ',,' ), 'path matches: a list of separators gates nothing' );
+advtn_assert_same( true, ADVTN_Path_Match::matches_path( '/', '/' ), 'path matches: the root matches a root entry' );
+advtn_assert_same( true, ADVTN_Path_Match::matches_path( '/archive', '/,/archive' ), 'path matches: a hit on the second entry' );
+advtn_assert_same( true, ADVTN_Path_Match::matches_path( '/archive', '/ , /archive/ ' ), 'path matches: entries are normalized before comparing' );
+advtn_assert_same( false, ADVTN_Path_Match::matches_path( '/news', '/,/archive' ), 'path matches: an unlisted path does not match' );
+advtn_assert_same( false, ADVTN_Path_Match::matches_path( '/archive', '/' ), 'path matches: the root entry does not match a deeper path' );
+advtn_assert_same( false, ADVTN_Path_Match::matches_path( '/archive/page/2', '/,/archive' ), 'path matches: matching is exact, not prefix' );
+advtn_assert_same( false, ADVTN_Path_Match::matches_path( '/archive-2024', '/,/archive' ), 'path matches: a path that merely starts the same does not match' );
+advtn_assert_same( false, ADVTN_Path_Match::matches_path( '', '/' ), 'path matches: an unknown current path fails a non-empty list' );
+advtn_assert_same( true, ADVTN_Path_Match::matches_path( '', '' ), 'path matches: an unknown current path still passes an empty list' );
+
+// current_path() is the one method that reads request state.
+$advtn_saved_uri = $_SERVER['REQUEST_URI'] ?? null;
+
+$_SERVER['REQUEST_URI'] = '/archive/?utm_source=x';
+advtn_assert_same( '/archive', ADVTN_Path_Match::current_path(), 'current path: read from REQUEST_URI, query dropped' );
+
+$_SERVER['REQUEST_URI'] = '/';
+advtn_assert_same( '/', ADVTN_Path_Match::current_path(), 'current path: the homepage is the root' );
+
+unset( $_SERVER['REQUEST_URI'] );
+advtn_assert_same( '', ADVTN_Path_Match::current_path(), 'current path: absent REQUEST_URI yields no path' );
+advtn_assert_same( false, ADVTN_Path_Match::matches( '/' ), 'current path: with no request path, a list fails closed' );
+advtn_assert_same( true, ADVTN_Path_Match::matches( '' ), 'current path: with no request path, an empty list still passes' );
+
+if ( null === $advtn_saved_uri ) {
+	unset( $_SERVER['REQUEST_URI'] );
+} else {
+	$_SERVER['REQUEST_URI'] = $advtn_saved_uri;
+}
+
+/* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );
 
