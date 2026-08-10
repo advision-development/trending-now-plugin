@@ -144,10 +144,26 @@ final class ADVTN_Path_Match {
 	 * $current is normalized here rather than trusted, so a caller that hands
 	 * over a raw path gets the comparison it expects instead of a silent miss.
 	 * Re-normalizing the already-normalized value matches() passes changes
-	 * nothing, bar the pathological doubly-encoded slug (`%2520`), where the
-	 * second decode can only turn a match into a miss — the safe direction. The
-	 * fail-closed case survives too: normalize( '' ) is '' and '' is never a
-	 * needle.
+	 * nothing — with one exception, and it does not fail in the safe direction.
+	 *
+	 * normalize() is not idempotent for a doubly-encoded sequence: current_path()
+	 * decodes `/tr%2565nding` once to `/tr%65nding`, and this second normalize
+	 * decodes it again to `/trending`, which then matches a `/trending` needle it
+	 * should not. That is an unwanted MATCH, not an unwanted miss. It is
+	 * unreachable as real content — sanitize_title() strips `%`, so no post, page
+	 * or term slug can hold a percent sequence, and any URL that survives two
+	 * decodes into a needle is therefore a 404 — so the effect is a widget
+	 * appearing on a 404 page, showing nothing it does not already publish where
+	 * it was meant to. Percent-encoded non-ASCII slugs are genuinely idempotent:
+	 * UTF-8 continuation bytes are all >= 0x80 and can never decode to 0x25.
+	 *
+	 * Do not build a prefix or wildcard rule on the assumption that this cannot
+	 * over-match. Under the trailing `*` the spec reserves for section matching,
+	 * the same double decode stops being a 404 curiosity and becomes a
+	 * section-wide leak. Decode once, or compare before decoding.
+	 *
+	 * The fail-closed case survives regardless: normalize( '' ) is '' and '' is
+	 * never a needle.
 	 *
 	 * @param string $current Current path; normalized here, so either form works.
 	 * @param string $list    Raw comma-separated list.
