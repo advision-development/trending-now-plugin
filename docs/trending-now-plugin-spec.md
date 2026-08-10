@@ -760,6 +760,14 @@ All three call the same `ADVTN_Renderer::render( array $args ): string`.
 
 **Template tag** — `advtn_render( array $args = [] )` echoes; `advtn_get_html( array $args = [] )` returns. For direct theme placement.
 
+**Path gating** — an optional `match_path` (shortcode; `matchpath` is also accepted, since `shortcode_atts()` lowercases attribute names before matching them against defaults — the block's `matchPath` needs no such fallback, because JS object keys are not lowercased) or `matchPath` (block) attribute limits a placement to a comma-separated list of paths, so a placement dropped into a site-wide widget area can be pinned to `/` and nowhere else. An empty or absent value renders everywhere — unchanged from every install that predates this attribute.
+
+Matching, via `ADVTN_Path_Match`, is **exact rather than prefix**: `/archive` matches `/archive` and `/archive/` but not `/archive/page/2/` or `/archive-2024`. A prefix match was rejected because it would let one list entry silently swallow an entire section; a trailing `*` is the additive way in if section-wide matching is ever wanted.
+
+The gate is evaluated in `ADVTN_Shortcode::render()` and `ADVTN_Block::render()`, both returning `''` before `ADVTN_Renderer::render()` is called — never inside the renderer itself. `render()` keys its cache on `md5( wp_json_encode( $args ) )`; a path list threaded into `$args` would mint a distinct cached copy of identical HTML per distinct list, and would invite a later change that tries to vary output by a path the cache key has no way to express.
+
+The block's editor preview bypasses the gate: `wp-server-side-render` calls the render callback over REST carrying the *editor's* URL, not the reader's, so gating there would render the block blank while it is being edited. The bypass requires `current_user_can( 'edit_posts' )` alongside `REST_REQUEST`, because `REST_REQUEST` alone stays true for the life of any `/wp-json/*` request — including an anonymous, publicly readable `GET /wp/v2/pages/<id>?context=view`, which returns the block already rendered inside `content.rendered`. The block-renderer endpoint the editor's preview calls already requires edit permission in its own permission callback, so a genuine preview is unaffected by the added check. `is_admin()` is unchanged and separately covers admin-rendered contexts, such as the Widgets screen, where `REST_REQUEST` is never set. Accepted limitation: a logged-in editor browsing the public REST API still bypasses the gate, for content they can already edit.
+
 ### 8.3 Cache
 
 - Cache key: `'advtn_render_cache_' . md5( wp_json_encode( $normalized_args ) )`.

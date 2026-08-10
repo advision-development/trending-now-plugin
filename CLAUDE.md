@@ -230,6 +230,16 @@ the removal keep their news classification.
   has been failing.
 - Anything that writes source state writes the attempt ring with it. Both paths go through
   `ADVTN_Attempts::record()` so the cap and the error truncation cannot drift apart.
+- Path gating lives in `ADVTN_Shortcode` and `ADVTN_Block`, never in `ADVTN_Renderer`. The
+  renderer keys its cache on the args hash, so a path list in `$args` caches byte-identical
+  HTML once per distinct list — and invites a later change that varies output by a path the
+  key cannot express. Both callers return `''` before `render()` is reached.
+- `ADVTN_Path_Match` is pure static except `current_path()`, which is the only method that
+  touches `$_SERVER` or `home_url()`. Keep it that way: that split is what makes the
+  subdirectory-install and absent-REQUEST_URI cases testable in the harness.
+- The shortcode accepts `match_path` and `matchpath`. `shortcode_parse_atts()` lowercases
+  attribute names, so a `match_path`-only attribute makes the documented `matchPath`
+  spelling a silent no-op. Any future multi-word shortcode attribute has the same trap.
 
 ## Testing
 

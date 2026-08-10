@@ -196,7 +196,8 @@ Gutenberg, classic widgets and theme templates:
 ```
 [trending_now limit="30" layout="news" heading="Trending Now"
               show_images="1" show_source="1" show_date="1"
-              show_icons="0" show_excerpt="0" show_see_all="1"]
+              show_icons="0" show_excerpt="0" show_see_all="1"
+              match_path="/,/archive"]
 ```
 
 **Block** — *Trending Now*, with the same options in the inspector.
@@ -204,6 +205,15 @@ Gutenberg, classic widgets and theme templates:
 Every display attribute is optional. Omit one and it inherits the setting; supply it and
 it wins for that instance. Off by default for excerpts, since not every source provides
 one — GDELT never did, and Google News does not either.
+
+`match_path` (shortcode) / `matchPath` (block) limits a placement to a comma-separated
+list of paths; an empty or absent value renders everywhere, which is the same as before
+this attribute existed. Matching is **exact** and trailing-slash-insensitive: `/archive`
+covers `/archive` and `/archive/`, but not `/archive/page/2/` and not `/archive-2024`.
+Query strings are ignored, so `/?utm_source=x` still matches `/`. On a subdirectory
+install, `/` means the site's homepage, not the server root. On the shortcode, both
+`match_path` and `matchPath` work, because WordPress lowercases shortcode attribute names
+before it reads them.
 
 Three layouts, and **`news` is the default** — what you get with a bare `[trending_now]`.
 It is the Google News / MSN style: source name and a relative
@@ -690,6 +700,11 @@ cannot work without it.
 
 **Widget vanished after a settings change.** `class_prefix` changes every class name in
 the markup. Check what you are grepping for.
+
+**The widget appears on every page.** A widget area is site-wide, so a widget placed there
+renders everywhere. Add `match_path` to limit it: `[trending_now match_path="/"]` renders on
+the homepage only. This does not change the theme restriction that pushed you into a widget
+in the first place — it stops the workaround leaking onto every other page.
 
 ## What this deliberately does not do
 

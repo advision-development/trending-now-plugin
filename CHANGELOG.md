@@ -5,6 +5,43 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`match_path` (shortcode) and `matchPath` (block) limit a placement to specific paths.**
+  Some themes will not render a shortcode on the homepage at all, so the widget goes into a
+  theme widget area instead — and a widget area is site-wide, so the same placement then
+  renders on every page, not just the one it was meant for. The new attribute takes a
+  comma-separated list of paths (`/,/archive`); an empty or absent value renders everywhere,
+  which is exactly what every install that predates this attribute already does.
+
+  Matching, in the new `ADVTN_Path_Match`, is **exact**, not prefix: `/archive` matches
+  `/archive` and `/archive/` but not `/archive/page/2/` or `/archive-2024`. A prefix match
+  was rejected because one list entry would then silently swallow an entire section; a
+  trailing `*` is the additive way in if section-wide matching is ever wanted. The shortcode
+  accepts both `match_path` and `matchpath`, because `shortcode_atts()` lowercases attribute
+  names before matching them against its defaults — a `match_path`-only implementation would
+  have silently dropped the documented `matchPath` spelling the moment anyone typed it with
+  a capital P.
+
+  The gate lives in `ADVTN_Shortcode` and `ADVTN_Block`, not in `ADVTN_Renderer`: `render()`
+  keys its cache on the args hash, and a path list folded into `$args` would mint one cached
+  copy of identical HTML per distinct list, for no benefit. A placement whose path does not
+  match costs nothing beyond that check either — it returns `''` before the renderer is ever
+  called, so a non-matching placement adds no render-cache variant.
+
+  The block's editor preview bypasses the gate, because `wp-server-side-render` calls the
+  render callback over REST carrying the *editor's* own URL, not the reader's — gating there
+  would render the block blank while it is being edited and read as broken. That bypass was
+  first scoped to `REST_REQUEST` alone, which stays true for the life of any `/wp-json/*`
+  request, not just the editor's preview call: an anonymous `GET /wp/v2/pages/<id>` also
+  qualified, handing that page's rendered block to anyone who asked, regardless of
+  `matchPath`. It now also requires `current_user_can( 'edit_posts' )`, which the
+  block-renderer endpoint the editor's preview calls already enforces in its own permission
+  callback, so the real preview is unaffected. One accepted gap: a logged-in editor browsing
+  the public REST API still bypasses the gate, for content they can already edit.
+
 ## [1.1.6] — 2026-08-08
 
 ### Fixed
