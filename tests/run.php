@@ -441,6 +441,22 @@ advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( '/archive#top' ), 'p
 advtn_assert_same( '/my page', ADVTN_Path_Match::normalize( '/my%20page' ), 'path normalize: percent-encoding is decoded' );
 advtn_assert_same( '/a/b', ADVTN_Path_Match::normalize( '/a//b/' ), 'path normalize: interior repeated slashes collapse' );
 
+// Whitespace the decode introduces is trimmed, or the return contract is a lie:
+// a trailing one stops rtrim() and keeps the trailing slash it promises to drop.
+advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( '/archive%20' ), 'path normalize: an encoded trailing space is trimmed after decoding' );
+advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( '%20/archive' ), 'path normalize: an encoded leading space is trimmed after decoding' );
+advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( '/archive/%20' ), 'path normalize: an encoded space cannot preserve a trailing slash' );
+
+// A pasted full URL is the likeliest way to write an entry that never matches.
+advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( 'https://example.com/archive' ), 'path normalize: a full https URL keeps only its path' );
+advtn_assert_same( '/archive', ADVTN_Path_Match::normalize( 'http://example.com/archive/' ), 'path normalize: a full http URL keeps only its path' );
+advtn_assert_same( '/', ADVTN_Path_Match::normalize( 'https://example.com' ), 'path normalize: a URL with no path is the root' );
+advtn_assert_same( '/a/b', ADVTN_Path_Match::normalize( 'https://example.com/a/b?x=1' ), 'path normalize: a URL keeps its path and drops its query' );
+
+// Protocol-relative input is left alone on purpose: telling a host from a
+// doubled slash means guessing, and a doubled slash is the likelier typo here.
+advtn_assert_same( '/example.com/archive', ADVTN_Path_Match::normalize( '//example.com/archive' ), 'path normalize: protocol-relative input is treated as a path, not a URL' );
+
 advtn_assert_same( '/archive', ADVTN_Path_Match::path_from( '/archive', '/' ), 'path from: a root install passes the path through' );
 advtn_assert_same( '/archive', ADVTN_Path_Match::path_from( '/archive/', '' ), 'path from: an empty base is treated as root' );
 advtn_assert_same( '/', ADVTN_Path_Match::path_from( '/', '/' ), 'path from: the root of a root install is the root' );
@@ -463,6 +479,10 @@ advtn_assert_same( false, ADVTN_Path_Match::matches_path( '/archive/page/2', '/,
 advtn_assert_same( false, ADVTN_Path_Match::matches_path( '/archive-2024', '/,/archive' ), 'path matches: a path that merely starts the same does not match' );
 advtn_assert_same( false, ADVTN_Path_Match::matches_path( '', '/' ), 'path matches: an unknown current path fails a non-empty list' );
 advtn_assert_same( true, ADVTN_Path_Match::matches_path( '', '' ), 'path matches: an unknown current path still passes an empty list' );
+
+// $current is normalized here rather than trusted, so a raw path compares.
+advtn_assert_same( true, ADVTN_Path_Match::matches_path( '/Archive/', '/archive' ), 'path matches: an un-normalized current path is normalized before comparing' );
+advtn_assert_same( false, ADVTN_Path_Match::matches_path( '   ', '/' ), 'path matches: a blank current path stays fail-closed after normalizing' );
 
 // current_path() is the one method that reads request state.
 $advtn_saved_uri = $_SERVER['REQUEST_URI'] ?? null;

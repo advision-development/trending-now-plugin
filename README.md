@@ -197,7 +197,7 @@ Gutenberg, classic widgets and theme templates:
 [trending_now limit="30" layout="news" heading="Trending Now"
               show_images="1" show_source="1" show_date="1"
               show_icons="0" show_excerpt="0" show_see_all="1"
-              match_path="/,/archive"]
+              match_path="/,/trending"]
 ```
 
 **Block** — *Trending Now*, with the same options in the inspector.
@@ -208,12 +208,15 @@ one — GDELT never did, and Google News does not either.
 
 `match_path` (shortcode) / `matchPath` (block) limits a placement to a comma-separated
 list of paths; an empty or absent value renders everywhere, which is the same as before
-this attribute existed. Matching is **exact** and trailing-slash-insensitive: `/archive`
-covers `/archive` and `/archive/`, but not `/archive/page/2/` and not `/archive-2024`.
+this attribute existed. The example above is the homepage plus the archive at its default
+slug — write whatever `archive_slug` is actually set to, since `/trending` is only the
+default. Matching is **exact** and trailing-slash-insensitive: `/trending`
+covers `/trending` and `/trending/`, but not `/trending/page/2/` and not `/trending-2024`.
 Query strings are ignored, so `/?utm_source=x` still matches `/`. On a subdirectory
-install, `/` means the site's homepage, not the server root. On the shortcode, both
-`match_path` and `matchPath` work, because WordPress lowercases shortcode attribute names
-before it reads them.
+install, `/` means the site's homepage, not the server root. A pasted full URL is reduced
+to its path, so `https://example.com/trending` behaves as `/trending`. On the shortcode,
+both `match_path` and `matchPath` work, because WordPress lowercases shortcode attribute
+names before it reads them.
 
 Three layouts, and **`news` is the default** — what you get with a bare `[trending_now]`.
 It is the Google News / MSN style: source name and a relative

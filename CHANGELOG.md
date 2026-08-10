@@ -13,8 +13,9 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Some themes will not render a shortcode on the homepage at all, so the widget goes into a
   theme widget area instead — and a widget area is site-wide, so the same placement then
   renders on every page, not just the one it was meant for. The new attribute takes a
-  comma-separated list of paths (`/,/archive`); an empty or absent value renders everywhere,
-  which is exactly what every install that predates this attribute already does.
+  comma-separated list of paths (`/,/trending` for the homepage plus the archive at its
+  default slug); an empty or absent value renders everywhere, which is exactly what every
+  install that predates this attribute already does.
 
   Matching, in the new `ADVTN_Path_Match`, is **exact**, not prefix: `/archive` matches
   `/archive` and `/archive/` but not `/archive/page/2/` or `/archive-2024`. A prefix match
@@ -26,6 +27,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   documented `matchPath` spelling the moment anyone typed it with a capital P, since
   `shortcode_atts()` would receive `matchpath` and find no default under that key.
 
+  Both sides of the comparison go through `ADVTN_Path_Match::normalize()`: one leading slash,
+  no trailing slash, lowercase, no query string or fragment, repeated slashes collapsed,
+  percent-encoding decoded and whitespace trimmed *after* decoding, so an encoded trailing
+  space cannot survive to defeat the trailing-slash rule. An entry written as a full URL keeps
+  only its path — `https://example.com/trending` means `/trending`, rather than matching
+  nothing on every page and looking exactly like a broken plugin — while protocol-relative
+  input stays a path, because telling a host from a doubled slash means guessing and a doubled
+  slash is the likelier typo in a list of paths.
+
   The gate lives in `ADVTN_Shortcode` and `ADVTN_Block`, not in `ADVTN_Renderer`: `render()`
   keys its cache on the args hash, and a path list folded into `$args` would mint one cached
   copy of identical HTML per distinct list, for no benefit. A placement whose path does not
@@ -34,15 +44,25 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
   The block's editor preview bypasses the gate, because `wp-server-side-render` calls the
   render callback over REST carrying the *editor's* own URL, not the reader's — gating there
-  would render the block blank while it is being edited and read as broken. The bypass
-  requires `current_user_can( 'edit_posts' )` alongside `REST_REQUEST`, because `REST_REQUEST`
-  alone stays true for the life of any `/wp-json/*` request, not just the editor's preview
-  call: an anonymous `GET /wp/v2/pages/<id>` also qualifies, and would otherwise hand back
-  that page's rendered block regardless of `matchPath`. The added capability check costs
-  nothing for a genuine preview, because the block-renderer endpoint the editor's preview
-  calls already enforces it in its own permission callback. One accepted gap: a logged-in
-  editor browsing the public REST API still bypasses the gate, for content they can already
-  edit.
+  would render the block blank while it is being edited and read as broken. `is_admin()`
+  separately covers admin-rendered contexts such as the Widgets screen, where `REST_REQUEST`
+  is never set.
+
+  Neither flag identifies an editor by itself, so the bypass requires
+  `current_user_can( 'edit_posts' )` alongside **both** of them. `REST_REQUEST` stays true for
+  the life of any `/wp-json/*` request, not just the editor's preview call: an anonymous
+  `GET /wp/v2/pages/<id>` also qualifies, and would otherwise hand back that page's rendered
+  block regardless of `matchPath`. `is_admin()` has the identical hole — `WP_ADMIN` is defined
+  for `wp-admin/admin-ajax.php`, which dispatches `wp_ajax_nopriv_*` actions to logged-out
+  visitors, so a theme that renders post content over admin-ajax (infinite scroll, "load
+  more", AJAX page transitions) would bypass the gate for anonymous readers. The capability
+  check costs a genuine preview nothing, because the block-renderer endpoint the editor's
+  preview calls already enforces it in its own permission callback, and nothing in core
+  renders this block under `is_admin()` for a user who cannot `edit_posts` — the block widgets
+  screen and the site editor both preview over REST. The two flag checks are evaluated first,
+  so a front-end pageview never reaches `current_user_can()` and never loads a user to find
+  out it is not editing. One accepted gap: a logged-in editor browsing the public REST API
+  still bypasses the gate, for content they can already edit.
 
 ## [1.1.6] — 2026-08-08
 

@@ -25,7 +25,24 @@ final class ADVTN_Path_Match {
 	 * Reduce a path to a comparable form.
 	 *
 	 * One leading slash, no trailing slash, `/` for the root, lowercased, with
-	 * the query string and fragment removed and percent-encoding decoded.
+	 * the query string and fragment removed, percent-encoding decoded, repeated
+	 * slashes collapsed and surrounding whitespace stripped. Whitespace is
+	 * trimmed *after* decoding, so a `%20` at either end cannot survive into the
+	 * result — a trailing one used to defeat the rtrim() and leave the trailing
+	 * slash the return contract promises to remove.
+	 *
+	 * Input carrying an explicit `scheme://` keeps only its path component, so
+	 * a pasted `https://example.com/archive` normalizes to `/archive` rather
+	 * than to the nonsense `/https:/example.com/archive` that collapsing the
+	 * `//` produces — that being the likeliest way to write a list entry that
+	 * can never match anything. A URL with no path at all yields `/`. The
+	 * scheme is parsed by hand rather than with wp_parse_url() so this method
+	 * stays reachable from the dependency-free harness.
+	 *
+	 * Protocol-relative input is deliberately *not* treated as a URL:
+	 * `//example.com/archive` still collapses to `/example.com/archive`.
+	 * Telling a host from a doubled slash means guessing, and in a list of
+	 * paths a doubled slash is much the likelier typo.
 	 *
 	 * An empty input returns '' rather than '/'. That is load-bearing: if empty
 	 * normalized to the root, an absent REQUEST_URI would silently satisfy a
@@ -43,10 +60,18 @@ final class ADVTN_Path_Match {
 	public static function normalize( string $path ): string {
 		$path = explode( '#', $path, 2 )[0];
 		$path = explode( '?', $path, 2 )[0];
-		$path = rawurldecode( trim( $path ) );
+		$path = trim( rawurldecode( $path ) );
 
-		if ( '' === trim( $path ) ) {
+		if ( '' === $path ) {
 			return '';
+		}
+
+		$scheme = array();
+
+		if ( preg_match( '#^[a-z][a-z0-9+.\-]*://#i', $path, $scheme ) ) {
+			$authority = substr( $path, strlen( $scheme[0] ) );
+			$boundary  = strpos( $authority, '/' );
+			$path      = false === $boundary ? '/' : substr( $authority, $boundary );
 		}
 
 		$path = (string) preg_replace( '#/+#', '/', $path );
@@ -116,11 +141,20 @@ final class ADVTN_Path_Match {
 	 * Entries are dropped after normalizing, not before, so a stray ",," cannot
 	 * become an empty needle that an empty $current would match.
 	 *
-	 * @param string $current Normalized current path.
+	 * $current is normalized here rather than trusted, so a caller that hands
+	 * over a raw path gets the comparison it expects instead of a silent miss.
+	 * Re-normalizing the already-normalized value matches() passes changes
+	 * nothing, bar the pathological doubly-encoded slug (`%2520`), where the
+	 * second decode can only turn a match into a miss — the safe direction. The
+	 * fail-closed case survives too: normalize( '' ) is '' and '' is never a
+	 * needle.
+	 *
+	 * @param string $current Current path; normalized here, so either form works.
 	 * @param string $list    Raw comma-separated list.
 	 * @return bool
 	 */
 	public static function matches_path( string $current, string $list ): bool {
+		$current = self::normalize( $current );
 		$needles = array();
 
 		foreach ( explode( ',', $list ) as $entry ) {

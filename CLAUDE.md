@@ -240,6 +240,16 @@ the removal keep their news classification.
 - The shortcode accepts `match_path` and `matchpath`. `shortcode_parse_atts()` lowercases
   attribute names, so a `match_path`-only attribute makes the documented `matchPath`
   spelling a silent no-op. Any future multi-word shortcode attribute has the same trap.
+- The block's editor bypass is
+  `( ( defined( 'REST_REQUEST' ) && REST_REQUEST ) || is_admin() ) && current_user_can( 'edit_posts' )`.
+  Both flags are true in anonymous contexts — `REST_REQUEST` on any `/wp-json/*` request,
+  `is_admin()` on `admin-ajax.php`, which dispatches `wp_ajax_nopriv_*` — so both need the
+  capability. Keep `current_user_can()` last: on a front-end pageview both flags are false
+  and no user should be loaded to discover it.
+- `ADVTN_Path_Match::normalize()` trims *after* percent-decoding and strips an explicit
+  `scheme://host` down to the path. A stray trailing space used to defeat the `rtrim()` and
+  keep a trailing slash — harmless under exact matching, fail-open the moment a trailing
+  `*` prefix rule `rtrim()`s that value.
 
 ## Testing
 
