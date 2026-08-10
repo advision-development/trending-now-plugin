@@ -61,10 +61,25 @@ final class ADVTN_Shortcode {
 				'show_icons'   => '',
 				'show_excerpt' => '',
 				'show_see_all' => '1',
+				'match_path'   => '',
+				'matchpath'    => '',
 			),
 			is_array( $atts ) ? $atts : array(),
 			self::TAG
 		);
+
+		// Both spellings, canonical first. A widget area is site-wide, so
+		// this is how a placement inside one says "render here, not there".
+		//
+		// The gate sits here rather than in the renderer on purpose:
+		// ADVTN_Renderer::render() keys its cache on the args hash, so a
+		// path list in $args would mint a separate cached copy of identical
+		// HTML for every distinct list.
+		$advtn_match = '' !== (string) $atts['match_path'] ? (string) $atts['match_path'] : (string) $atts['matchpath'];
+
+		if ( ! ADVTN_Path_Match::matches( $advtn_match ) ) {
+			return '';
+		}
 
 		$args = array( 'show_see_all' => $atts['show_see_all'] );
 
