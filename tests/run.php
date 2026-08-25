@@ -625,6 +625,23 @@ advtn_assert_same( '11', ADVTN_Manual_Feed_Parser::parse( '{"feed":{"version":"1
 advtn_assert_same( '', ADVTN_Manual_Feed_Parser::parse( '{"feed":{},"items":[]}' )['version'], 'feed parse: an absent version means no ETag to send' );
 
 /* -------------------------------------------------------------------------
+ * A forced fetch asks unconditionally
+ *
+ * --force skips two gates, and only one of them is a convenience. Skipping the
+ * interval saves a wait; skipping the stored ETag is what makes force able to
+ * repair anything at all. A conditional request says "I already hold version
+ * N", so a site whose list went missing would be told 304 and left exactly as
+ * broken as it was — with the fetch reporting success.
+ * ---------------------------------------------------------------------- */
+
+$advtn_etag = new ReflectionMethod( 'ADVTN_Manual_Feed', 'conditional_etag' );
+$advtn_etag->setAccessible( true );
+
+advtn_assert_same( '"v6"', $advtn_etag->invoke( null, '"v6"', false ), 'feed force: an ordinary fetch sends the stored ETag' );
+advtn_assert_same( '', $advtn_etag->invoke( null, '"v6"', true ), 'feed force: a forced fetch sends no ETag, so 304 cannot refuse the repair' );
+advtn_assert_same( '', $advtn_etag->invoke( null, '', false ), 'feed force: a first fetch has no ETag to send' );
+
+/* -------------------------------------------------------------------------
  * Feed subscription settings
  * ---------------------------------------------------------------------- */
 

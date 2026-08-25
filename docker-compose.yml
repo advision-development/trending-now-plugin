@@ -65,13 +65,16 @@ services:
     ports:
       - "8081:80"
     environment:
-      WORDPRESS_DB_HOST: db
+      <<: *wp_env
       WORDPRESS_DB_NAME: wordpress_source
-      WORDPRESS_DB_USER: wordpress
-      WORDPRESS_DB_PASSWORD: wordpress
-      WORDPRESS_DEBUG: 1
     volumes:
       - source_data:/var/www/html
+      # The plugin runs on this site too. Two installs subscribed to one feed is
+      # the claim the whole subscription exists to make, and a single install
+      # cannot demonstrate it: it cannot show that two sites receive the same
+      # links while counting their own exposure separately.
+      - .:/var/www/html/wp-content/plugins/trending-now
+      - ./.docker/mu-dev-hosts.php:/var/www/html/wp-content/mu-plugins/advtn-dev-hosts.php:ro
 
   # One-shot command runner: `docker compose run --rm cli wp <command>`
   cli:
@@ -94,12 +97,15 @@ services:
     depends_on:
       - source
     environment:
-      WORDPRESS_DB_HOST: db
+      # The shared anchor, not a hand-copied subset. Without
+      # WORDPRESS_CONFIG_EXTRA the constants go missing in this container alone,
+      # and the failure reads as the plugin rather than the environment.
+      <<: *wp_env
       WORDPRESS_DB_NAME: wordpress_source
-      WORDPRESS_DB_USER: wordpress
-      WORDPRESS_DB_PASSWORD: wordpress
     volumes:
       - source_data:/var/www/html
+      - .:/var/www/html/wp-content/plugins/trending-now
+      - ./.docker/mu-dev-hosts.php:/var/www/html/wp-content/mu-plugins/advtn-dev-hosts.php:ro
     entrypoint: ["wp"]
     command: ["--info"]
 

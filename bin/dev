@@ -59,6 +59,11 @@ cmd_up() {
 
 	log "Configuring the source site"
 	src rewrite structure '/%postname%/' --hard >/dev/null
+	# The plugin runs here too. Its first job is to be a second subscriber: one
+	# feed serving two installs is the claim the subscription exists to make, and
+	# a single site cannot show that two of them get the same links while each
+	# counts its own exposure.
+	src plugin activate trending-now
 	src rewrite flush --hard >/dev/null
 
 	echo

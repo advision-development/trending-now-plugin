@@ -69,6 +69,30 @@ final class ADVTN_Manual_Feed {
 	}
 
 	/**
+	 * The ETag to send on this request, or an empty string to ask outright.
+	 *
+	 * A forced fetch must ask unconditionally. `If-None-Match` is a claim about
+	 * this site — "I already hold version N" — and a 304 answers by leaving the
+	 * stored list untouched. But the stored list is exactly what a human reaching
+	 * for --force has stopped trusting: they force a fetch *because* the site
+	 * looks wrong. Sending the ETag anyway lets the feed reply "you already have
+	 * it" to a site that has nothing, and the repair is refused in the one case
+	 * it was asked for. Recovery would then have to wait for an unrelated edit
+	 * upstream to change the version — on every site at once, and with nothing
+	 * on screen explaining the wait.
+	 *
+	 * The interval gate is skipped for convenience. This one is skipped for
+	 * correctness.
+	 *
+	 * @param string $stored ETag held from the last successful fetch.
+	 * @param bool   $force  Whether this fetch was forced.
+	 * @return string
+	 */
+	private static function conditional_etag( string $stored, bool $force ): string {
+		return $force ? '' : $stored;
+	}
+
+	/**
 	 * Stored fetch state.
 	 *
 	 * @return array<string,mixed>
@@ -119,7 +143,9 @@ final class ADVTN_Manual_Feed {
 	/**
 	 * Fetch the feed and, if it answered properly, make it this site's list.
 	 *
-	 * @param bool $force Skip the due-check. Never skips the validity check.
+	 * @param bool $force Skip the due-check and the stored ETag. Never skips the
+	 *                    validity check: a forced fetch still has to be answered
+	 *                    by something shaped like a feed before anything is kept.
 	 * @return array{status:string,message:string,count:int,skipped:int}
 	 */
 	public function fetch( bool $force = false ): array {
@@ -137,7 +163,7 @@ final class ADVTN_Manual_Feed {
 			return $this->fail( __( 'The feed URL is not a valid public http(s) address.', 'trending-now' ), null, 0 );
 		}
 
-		$response = $this->request( $url );
+		$response = $this->request( $url, $force );
 
 		if ( is_wp_error( $response['response'] ) ) {
 			return $this->fail( $response['response']->get_error_message(), null, $response['ms'] );
@@ -255,13 +281,14 @@ final class ADVTN_Manual_Feed {
 	 * rather than sent empty — a public feed needs none, and an empty bearer is
 	 * a credential that looks present and is not.
 	 *
-	 * @param string $url Feed URL.
+	 * @param string $url   Feed URL.
+	 * @param bool   $force  Ask unconditionally, ignoring the stored ETag.
 	 * @return array{response:array|WP_Error,code:int|null,body:string,ms:int,etag:string}
 	 */
-	private function request( string $url ): array {
+	private function request( string $url, bool $force = false ): array {
 		$started = microtime( true );
 		$token   = $this->settings->get_secret( 'manual_feed_token' );
-		$etag    = (string) ( $this->state()['etag'] ?? '' );
+		$etag    = self::conditional_etag( (string) ( $this->state()['etag'] ?? '' ), $force );
 
 		$headers = array( 'Accept' => 'application/json' );
 
