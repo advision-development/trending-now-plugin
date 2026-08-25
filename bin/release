@@ -95,27 +95,30 @@ preflight() {
 # tidiness, because this artifact is public and permanent.
 build() {
 	local out="$SLUG-$VERSION.zip"
-	local stage
-	stage=$(mktemp -d)
-	trap 'rm -rf "$stage"' RETURN
+
+	# Cleaned up on exit rather than on return: a RETURN trap set here fires
+	# again when *main* returns, by which point the directory variable is out
+	# of scope and `set -u` kills the script after the build already succeeded.
+	STAGE=$(mktemp -d)
+	trap 'rm -rf "${STAGE:-}"' EXIT
 
 	log "Exporting tracked files at HEAD"
-	mkdir -p "$stage/$SLUG"
-	git archive HEAD | tar -x -C "$stage/$SLUG"
+	mkdir -p "$STAGE/$SLUG"
+	git archive HEAD | tar -x -C "$STAGE/$SLUG"
 
 	local item
 	for item in "${EXCLUDE[@]}"; do
-		rm -rf "${stage:?}/$SLUG/$item"
+		rm -rf "${STAGE:?}/$SLUG/$item"
 	done
 
 	log "Installing runtime dependencies"
 	composer install --no-dev --optimize-autoloader --quiet \
-		--working-dir="$stage/$SLUG" || die "composer install failed"
+		--working-dir="$STAGE/$SLUG" || die "composer install failed"
 
 	rm -f "$out"
 	log "Packing $out"
-	( cd "$stage" && zip -qr "$out" "$SLUG" )
-	mv "$stage/$out" .
+	( cd "$STAGE" && zip -qr "$out" "$SLUG" )
+	mv "$STAGE/$out" .
 
 	ZIP="$out"
 }
