@@ -658,10 +658,26 @@ the release CDN, which rejects it anyway.
 ### Cutting a release
 
 ```bash
-# bump Version: and ADVTN_VERSION in trending-now.php, add a CHANGELOG entry
-git tag -a v1.0.1 -m "Trending Now 1.0.1" && git push origin v1.0.1
-gh release create v1.0.1 trending-now-1.0.1.zip --title "Trending Now 1.0.1" --notes-file -
+# bump Version: and ADVTN_VERSION in trending-now.php, add a CHANGELOG entry, merge
+bin/release             # build and check everything, publish nothing
+bin/release --publish    # then tag, push the tag and create the GitHub release
 ```
+
+`bin/release` reads the version from the plugin header, so there is nothing to type
+twice. It refuses to build unless the header, `ADVTN_VERSION` and a matching
+`## [x.y.z]` section in the CHANGELOG all agree, the working tree is clean, the tag is
+free, and the tests and linter pass. `--publish` additionally refuses to run anywhere
+but `main`. Release notes are taken from the CHANGELOG section rather than typed, so the
+release and the repository cannot disagree.
+
+The zip is built from `git archive HEAD`, never from the working directory: only tracked
+files exist in the export, so an untracked `.env` or a scratch dump cannot be published
+by accident. It then checks the archive it just made — one top-level `trending-now/`,
+`vendor/autoload.php` present, no test harness or local stack inside, and the packed
+plugin reporting the expected version.
+
+Merging to `main` ships nothing on its own. Sites learn about a version from GitHub's
+`releases/latest`, so a release that was never cut is a release no site will ever see.
 
 The tag may be `v1.0.1` or `1.0.1`; the leading `v` is stripped before comparison.
 

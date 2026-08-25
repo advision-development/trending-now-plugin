@@ -52,6 +52,11 @@ wp trending-now feed-fetch [--force]
 wp trending-now select | render [--uncached] | status | prune | unlock | purge
 ```
 
+Releases are cut with `bin/release` (dry run) and `bin/release --publish`. Merging to
+`main` ships nothing: sites read GitHub's `releases/latest`, so an uncut release is one
+no site will ever see. The script refuses to build unless the header, `ADVTN_VERSION` and
+the CHANGELOG agree — they have drifted once already.
+
 ## Architecture
 
 Single-table, three-option design. No custom post type, no client-side rendering.
