@@ -41,6 +41,14 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   and the message says so rather than sending somebody to check the field most likely to be
   correct.
 
+- **`--force` skips the stored ETag as well as the interval**, and that half is not a
+  convenience. `If-None-Match` is the site claiming "I already hold version N" — precisely
+  what somebody forcing a fetch has stopped believing. Found by wiping one site's links and
+  forcing a fetch: the feed answered `304`, the plugin reported *"The feed has not changed
+  since the last fetch"*, and the empty site stayed empty. Recovery would have had to wait
+  for an unrelated edit upstream to bump the version, on every site at once, with nothing on
+  screen explaining the wait.
+
 ### Fixed
 
 - **The local development stack could not start from a clean checkout.** `.gitignore`'s

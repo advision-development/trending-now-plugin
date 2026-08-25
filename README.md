@@ -222,6 +222,13 @@ escape hatch — signed with the same secret as `/ingest`, and documented under
 Repeated fetches are cheap. The plugin sends the version it already holds as an
 `If-None-Match`, so a feed that has not changed answers `304` and nothing is written.
 
+`--force` skips both the interval and that `If-None-Match`. The second half matters
+more than it looks: force is what somebody reaches for when a site's list looks wrong,
+and the ETag is the site claiming its list is fine. Asking conditionally would let the
+feed answer "you already have it" to a site holding nothing, and the repair would be
+refused in the one case it was requested — reported as success. So a forced fetch always
+asks outright and always re-commits.
+
 ### What can go wrong, and what it costs
 
 **Nothing, is the answer to the second half.** A failed fetch leaves the stored list
@@ -678,7 +685,7 @@ items whose host matches the local site are discarded as self-links and a shared
 would silently ingest nothing.
 
 ```bash
-bin/dev up          # start containers, install both sites, activate the plugin
+bin/dev up          # start containers, install both sites, activate the plugin on both
 bin/dev seed        # 5 posts on the source site, 4 with a featured image
 bin/dev configure   # register sources, place the shortcode on the front page
 bin/dev ingest      # synchronous cycle
@@ -694,6 +701,25 @@ bin/dev reset       # destroy containers and volumes
 |---|---|
 | Site under test | <http://localhost:8080> — `admin` / `admin` |
 | Source site | <http://127.0.0.1:8081> — `admin` / `admin` |
+
+The source site wears two hats. For ingestion it is the network site being read from;
+for the subscription it is a **second subscriber**, which is the only way to test the
+thing the feature exists for. Point both at one feed and fetch on each:
+
+```bash
+bin/dev wp  option patch update advtn_settings manual_feed_url  "$FEED"
+bin/dev wp  option patch update advtn_settings manual_feed_enabled 1
+bin/dev src option patch update advtn_settings manual_feed_url  "$FEED"
+bin/dev src option patch update advtn_settings manual_feed_enabled 1
+bin/dev wp  trending-now feed-fetch --force
+bin/dev src trending-now feed-fetch --force
+```
+
+Both sites end up with the same rows in the same order, including any two links sharing
+a position — the tiebreak is a property of the feed, so it resolves identically
+everywhere. Only the row `id`s differ: they come from `uniqid()` and are local handles
+that never travel. Exposure stays local too — `times_shown` lives in each site's own
+items table and is stamped when the *selection* is rebuilt, not when the widget renders.
 
 Copy `.env.example` to `.env` and fill in `SERPAPI_KEY` / `GITHUB_TOKEN`. Docker Compose
 loads that file automatically and passes both through as the constants above, so local

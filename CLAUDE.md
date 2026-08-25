@@ -29,7 +29,8 @@ composer test          # same thing
 find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l   # lint
 ```
 
-Local WordPress (two instances: site under test + a source site to ingest from):
+Local WordPress (two instances: site under test + a source site, which doubles as a
+second feed subscriber — see the README):
 
 ```bash
 bin/dev up && bin/dev seed && bin/dev configure && bin/dev ingest && bin/dev verify
@@ -165,6 +166,12 @@ a feed. Four rules, and each cost something to learn:
   for one that does not exist, deliberately — distinguishing them would let anybody map
   the network's feed names by guessing slugs. It is the one refusal this plugin cannot
   diagnose, so the message names both causes.
+- **A forced fetch is unconditional.** `--force` skips the interval *and* the stored
+  ETag. The second is not a convenience: `If-None-Match` is the site asserting "I already
+  hold version N", which is exactly the assertion somebody forcing a fetch has stopped
+  believing. Sending it anyway lets the feed answer 304 to a site holding nothing, so the
+  repair is refused in the one case it was asked for — and reported as success. See
+  `ADVTN_Manual_Feed::conditional_etag()`; the reasoning is on the method.
 
 The token is optional: a public feed needs none, and the `Authorization` header is omitted
 entirely rather than sent empty. While subscribed, the admin's rows render disabled *and*
