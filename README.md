@@ -7,7 +7,7 @@ The goal is **crawl discovery**: giving every newly published URL across a netwo
 guaranteed window of exposure in an internally-linked, server-rendered block on
 higher-authority properties.
 
-[![Version](https://img.shields.io/badge/version-1.1.7-blue)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue)](CHANGELOG.md)
 [![WordPress](https://img.shields.io/badge/WordPress-6.4%2B-21759b)](https://wordpress.org)
 [![PHP](https://img.shields.io/badge/PHP-7.4%2B-777bb4)](https://www.php.net)
 [![License](https://img.shields.io/badge/license-GPL--2.0--or--later-green)](LICENSE)

@@ -45,6 +45,15 @@ read_versions() {
 
 	grep -q "^## \[$VERSION\]" CHANGELOG.md \
 		|| die "CHANGELOG.md has no '## [$VERSION]' entry — write it before releasing"
+
+	# A fourth place, and the easiest to forget because nothing reads it but a
+	# human: the README badge. It was a version behind when this check was added.
+	local badge
+	badge=$(sed -n 's|.*img.shields.io/badge/version-\([0-9][^-]*\)-.*|\1|p' README.md | head -1)
+
+	if [ -n "$badge" ] && [ "$badge" != "$VERSION" ]; then
+		die "version drift: README badge says $badge, plugin says $VERSION"
+	fi
 }
 
 # Notes come from the CHANGELOG section rather than being typed at release
