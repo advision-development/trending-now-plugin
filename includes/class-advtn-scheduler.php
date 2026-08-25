@@ -97,6 +97,56 @@ final class ADVTN_Scheduler {
 	}
 
 	/**
+	 * Queue a recurring action, or its WP-Cron equivalent.
+	 *
+	 * WP-Cron has no arbitrary interval, so the fallback registers a schedule
+	 * named for the interval in seconds. Two hooks wanting the same interval
+	 * therefore share one schedule rather than each adding their own.
+	 *
+	 * Idempotent: an action already pending for this hook is left where it is.
+	 * Rescheduling it on every call would push its next run further out each
+	 * time and it would never fire.
+	 *
+	 * @param int          $timestamp First run.
+	 * @param int          $interval  Seconds between runs.
+	 * @param string       $hook      Hook name.
+	 * @param array<mixed> $args      Hook args.
+	 * @return int|string Action id, or 0 when one was already pending.
+	 */
+	public function schedule_recurring( int $timestamp, int $interval, string $hook, array $args = array() ) {
+		$interval = max( MINUTE_IN_SECONDS, $interval );
+
+		if ( $this->has_action_scheduler() ) {
+			if ( false !== as_next_scheduled_action( $hook, $args, self::GROUP ) ) {
+				return 0;
+			}
+
+			return as_schedule_recurring_action( $timestamp, $interval, $hook, $args, self::GROUP );
+		}
+
+		if ( wp_next_scheduled( $hook, $args ) ) {
+			return 0;
+		}
+
+		$name = 'advtn_every_' . $interval;
+
+		add_filter(
+			'cron_schedules', // phpcs:ignore WordPress.WP.CronInterval.ChangeDetected
+			static function ( $schedules ) use ( $name, $interval ) {
+				$schedules[ $name ] = array(
+					'interval' => $interval,
+					/* translators: %d: interval in seconds. */
+					'display'  => sprintf( __( 'Every %d seconds (Trending Now)', 'trending-now' ), $interval ),
+				);
+
+				return $schedules;
+			}
+		);
+
+		return wp_schedule_event( $timestamp, $name, $hook, $args ) ? 1 : 0;
+	}
+
+	/**
 	 * Remove pending actions for one hook.
 	 *
 	 * @param string $hook Hook name.
@@ -122,9 +172,10 @@ final class ADVTN_Scheduler {
 			as_unschedule_all_actions( self::HOOK_CYCLE );
 			as_unschedule_all_actions( self::HOOK_SOURCE );
 			as_unschedule_all_actions( self::HOOK_FINALIZE );
+			as_unschedule_all_actions( ADVTN_Manual_Feed::HOOK );
 		}
 
-		foreach ( array( self::HOOK_CYCLE, self::HOOK_SOURCE, self::HOOK_FINALIZE, ADVTN_Manual::HOOK ) as $hook ) {
+		foreach ( array( self::HOOK_CYCLE, self::HOOK_SOURCE, self::HOOK_FINALIZE, ADVTN_Manual::HOOK, ADVTN_Manual_Feed::HOOK ) as $hook ) {
 			wp_clear_scheduled_hook( $hook );
 		}
 	}

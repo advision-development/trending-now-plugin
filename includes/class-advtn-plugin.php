@@ -69,6 +69,7 @@ final class ADVTN_Plugin {
 		$this->scheduler()->register_hooks();
 		$this->updater()->register_hooks();
 		$this->manual()->register_hooks();
+		$this->manual_feed()->register_hooks();
 		$this->archive()->register_hooks();
 		$this->shortcode()->register_hooks();
 		$this->block()->register_hooks();
@@ -102,6 +103,14 @@ final class ADVTN_Plugin {
 		if ( get_option( 'advtn_flush_rewrites' ) ) {
 			delete_option( 'advtn_flush_rewrites' );
 			flush_rewrite_rules( false );
+		}
+
+		// Written by ADVTN_Settings::update() rather than acted on there,
+		// because Action Scheduler is not necessarily loaded at the moment a
+		// setting is saved from WP-CLI or a migration.
+		if ( get_option( 'advtn_reschedule_feed' ) ) {
+			delete_option( 'advtn_reschedule_feed' );
+			$this->manual_feed()->reschedule();
 		}
 	}
 
@@ -184,6 +193,15 @@ final class ADVTN_Plugin {
 	 */
 	public function archive(): ADVTN_Archive {
 		return $this->service( 'archive', fn() => new ADVTN_Archive( $this->settings(), $this->repository() ) );
+	}
+
+	/**
+	 * Curated-links feed subscription.
+	 *
+	 * @return ADVTN_Manual_Feed
+	 */
+	public function manual_feed(): ADVTN_Manual_Feed {
+		return $this->service( 'manual_feed', fn() => new ADVTN_Manual_Feed( $this->settings(), $this->manual() ) );
 	}
 
 	/**
