@@ -635,7 +635,12 @@ advtn_assert_same( '', ADVTN_Manual_Feed_Parser::parse( '{"feed":{},"items":[]}'
  * ---------------------------------------------------------------------- */
 
 $advtn_etag = new ReflectionMethod( 'ADVTN_Manual_Feed', 'conditional_etag' );
-$advtn_etag->setAccessible( true );
+
+// No-op since 8.1 and deprecated in 8.5, but the plugin's floor is 7.4 and
+// there the call is what makes the invoke() below legal.
+if ( PHP_VERSION_ID < 80100 ) {
+	$advtn_etag->setAccessible( true );
+}
 
 advtn_assert_same( '"v6"', $advtn_etag->invoke( null, '"v6"', false ), 'feed force: an ordinary fetch sends the stored ETag' );
 advtn_assert_same( '', $advtn_etag->invoke( null, '"v6"', true ), 'feed force: a forced fetch sends no ETag, so 304 cannot refuse the repair' );
