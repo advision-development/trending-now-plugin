@@ -504,6 +504,126 @@ if ( null === $advtn_saved_uri ) {
 	$_SERVER['REQUEST_URI'] = $advtn_saved_uri;
 }
 
+/* -------------------------------------------------------------------------
+ * ADVTN_Manual_Feed_Parser::parse()
+ *
+ * The feed is served from a host whose unmatched paths answer 200 with a
+ * single-page app's HTML. A client trusting the status code would record
+ * success on every request while nothing arrived — on every subscribed site,
+ * from one renamed function or one dropped rewrite. So validity is a property
+ * of the body, never of the status.
+ * ---------------------------------------------------------------------- */
+
+$advtn_feed_ok = wp_json_encode(
+	array(
+		'feed'  => array( 'slug' => 'pbn-sample', 'version' => 6 ),
+		'items' => array(
+			array(
+				'url'          => 'https://example.com/one',
+				'title'        => 'One',
+				'excerpt'      => 'First excerpt',
+				'image_url'    => 'https://example.com/one.png',
+				'site_name'    => 'Example',
+				'published_at' => '2026-08-24 09:00:00',
+				'expires_at'   => '2026-08-31 00:00:00',
+				'position'     => 3,
+			),
+			array( 'url' => 'https://example.com/two', 'title' => 'Two' ),
+		),
+	)
+);
+
+$advtn_parsed = ADVTN_Manual_Feed_Parser::parse( $advtn_feed_ok );
+
+advtn_assert_same( true, $advtn_parsed['ok'], 'feed parse: a well-formed payload succeeds' );
+advtn_assert_same( 2, $advtn_parsed['count'], 'feed parse: both items are mapped' );
+advtn_assert_same( 0, $advtn_parsed['skipped'], 'feed parse: nothing skipped in a clean payload' );
+advtn_assert_same( '6', $advtn_parsed['version'], 'feed parse: the version is read as a string for ETag use' );
+advtn_assert_same( 'https://example.com/one', $advtn_parsed['rows'][0]['url'], 'feed parse: url mapped' );
+advtn_assert_same( 'One', $advtn_parsed['rows'][0]['title'], 'feed parse: title mapped' );
+advtn_assert_same( 'First excerpt', $advtn_parsed['rows'][0]['excerpt'], 'feed parse: excerpt mapped' );
+advtn_assert_same( 'https://example.com/one.png', $advtn_parsed['rows'][0]['image_url'], 'feed parse: image mapped' );
+advtn_assert_same( 'Example', $advtn_parsed['rows'][0]['site_name'], 'feed parse: site name mapped' );
+advtn_assert_same( '2026-08-24 09:00:00', $advtn_parsed['rows'][0]['published_at'], 'feed parse: published_at passed through for the validator to normalize' );
+advtn_assert_same( '2026-08-31 00:00:00', $advtn_parsed['rows'][0]['expires_at'], 'feed parse: expires_at passed through' );
+advtn_assert_same( 3, $advtn_parsed['rows'][0]['position'], 'feed parse: position is an int' );
+
+// The feed has already dropped disabled rows, so anything that arrives is meant
+// to show. A row landing disabled would be stored and never rendered, which
+// reads as the feed being broken.
+advtn_assert_same( true, $advtn_parsed['rows'][0]['enabled'], 'feed parse: rows arrive enabled' );
+
+// Absent optional fields become empty strings and 0, not nulls: that is what
+// ADVTN_Manual::validate() expects, and a null would arrive as the string
+// 'null' and be parsed as a date.
+advtn_assert_same( '', $advtn_parsed['rows'][1]['excerpt'], 'feed parse: a missing excerpt is an empty string' );
+advtn_assert_same( '', $advtn_parsed['rows'][1]['image_url'], 'feed parse: a missing image is an empty string' );
+advtn_assert_same( '', $advtn_parsed['rows'][1]['expires_at'], 'feed parse: a missing expiry is an empty string' );
+advtn_assert_same( 0, $advtn_parsed['rows'][1]['position'], 'feed parse: a missing position falls where it may' );
+
+// THE case this class exists for.
+$advtn_spa = ADVTN_Manual_Feed_Parser::parse( '<!doctype html><html><head><title>Hawkeye</title></head><body><div id="root"></div></body></html>' );
+advtn_assert_same( false, $advtn_spa['ok'], 'feed parse: an HTML body is a failure, not an empty feed' );
+advtn_assert_same( ADVTN_Manual_Feed_Parser::CODE_NOT_JSON, $advtn_spa['code'], 'feed parse: an HTML body is reported as not-json' );
+advtn_assert_same( array(), $advtn_spa['rows'], 'feed parse: a failure yields no rows' );
+
+$advtn_no_feed = ADVTN_Manual_Feed_Parser::parse( '{"items":[]}' );
+advtn_assert_same( false, $advtn_no_feed['ok'], 'feed parse: a body with no feed object is a failure' );
+advtn_assert_same( ADVTN_Manual_Feed_Parser::CODE_SHAPE, $advtn_no_feed['code'], 'feed parse: a missing feed object is a shape error' );
+
+$advtn_no_items = ADVTN_Manual_Feed_Parser::parse( '{"feed":{"version":1}}' );
+advtn_assert_same( false, $advtn_no_items['ok'], 'feed parse: a body with no items array is a failure' );
+
+/*
+ * PHP cannot tell a JSON list from an object whose keys happen to be "0", "1",
+ * … — json_decode with assoc=true produces the same array for both, and the
+ * TypeScript on the other end can tell them apart where this cannot. It makes
+ * no difference: such an object yields exactly the rows the list would, so it
+ * is accepted rather than machinery being added to refuse something harmless.
+ */
+$advtn_items_numeric_object = ADVTN_Manual_Feed_Parser::parse( '{"feed":{"version":1},"items":{"0":{"url":"https://example.com/a","title":"A"}}}' );
+advtn_assert_same( true, $advtn_items_numeric_object['ok'], 'feed parse: an object keyed 0,1,… is indistinguishable from a list here, and yields the same rows' );
+advtn_assert_same( 1, $advtn_items_numeric_object['count'], 'feed parse: and it maps the same row' );
+
+// A shape that is genuinely not a list is still refused, which is the case
+// worth having.
+$advtn_items_keyed = ADVTN_Manual_Feed_Parser::parse( '{"feed":{"version":1},"items":{"first":{"url":"https://example.com/a","title":"A"}}}' );
+advtn_assert_same( false, $advtn_items_keyed['ok'], 'feed parse: an object with real keys is not an items list' );
+advtn_assert_same( ADVTN_Manual_Feed_Parser::CODE_SHAPE, $advtn_items_keyed['code'], 'feed parse: and it is reported as a shape error' );
+
+advtn_assert_same( false, ADVTN_Manual_Feed_Parser::parse( '"just a string"' )['ok'], 'feed parse: valid JSON that is not an object is a failure' );
+advtn_assert_same( false, ADVTN_Manual_Feed_Parser::parse( '' )['ok'], 'feed parse: an empty body is a failure' );
+
+// An empty list is a real answer, and the only way to clear the network
+// deliberately. It must be distinguishable from every failure above.
+$advtn_empty = ADVTN_Manual_Feed_Parser::parse( '{"feed":{"version":4},"items":[]}' );
+advtn_assert_same( true, $advtn_empty['ok'], 'feed parse: a validated empty list succeeds' );
+advtn_assert_same( 0, $advtn_empty['count'], 'feed parse: an empty list carries no rows' );
+advtn_assert_same( '4', $advtn_empty['version'], 'feed parse: an empty list still carries its version' );
+
+// One unusable row must not cost a site its whole list.
+$advtn_partial = ADVTN_Manual_Feed_Parser::parse(
+	wp_json_encode(
+		array(
+			'feed'  => array( 'version' => 2 ),
+			'items' => array(
+				array( 'url' => 'https://example.com/good', 'title' => 'Good' ),
+				array( 'title' => 'No URL at all' ),
+				'not even an array',
+				array( 'url' => 'https://example.com/untitled' ),
+			),
+		)
+	)
+);
+
+advtn_assert_same( true, $advtn_partial['ok'], 'feed parse: unusable rows do not fail the payload' );
+advtn_assert_same( 1, $advtn_partial['count'], 'feed parse: only the usable row is mapped' );
+advtn_assert_same( 3, $advtn_partial['skipped'], 'feed parse: unusable rows are counted rather than silently dropped' );
+advtn_assert_same( array( 0 ), array_keys( $advtn_partial['rows'] ), 'feed parse: rows are re-indexed as a list' );
+
+advtn_assert_same( '11', ADVTN_Manual_Feed_Parser::parse( '{"feed":{"version":"11"},"items":[]}' )['version'], 'feed parse: a string version is accepted as given' );
+advtn_assert_same( '', ADVTN_Manual_Feed_Parser::parse( '{"feed":{},"items":[]}' )['version'], 'feed parse: an absent version means no ETag to send' );
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );
