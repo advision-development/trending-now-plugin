@@ -624,6 +624,74 @@ advtn_assert_same( array( 0 ), array_keys( $advtn_partial['rows'] ), 'feed parse
 advtn_assert_same( '11', ADVTN_Manual_Feed_Parser::parse( '{"feed":{"version":"11"},"items":[]}' )['version'], 'feed parse: a string version is accepted as given' );
 advtn_assert_same( '', ADVTN_Manual_Feed_Parser::parse( '{"feed":{},"items":[]}' )['version'], 'feed parse: an absent version means no ETag to send' );
 
+/* -------------------------------------------------------------------------
+ * Feed subscription settings
+ * ---------------------------------------------------------------------- */
+
+$advtn_feed_defaults = ADVTN_Settings::defaults();
+
+advtn_assert_same( '', $advtn_feed_defaults['manual_feed_url'], 'feed settings: no feed URL by default' );
+advtn_assert_same( '', $advtn_feed_defaults['manual_feed_token'], 'feed settings: no token by default' );
+advtn_assert_same( 6, $advtn_feed_defaults['manual_feed_interval_hours'], 'feed settings: six hours by default' );
+advtn_assert_same( false, $advtn_feed_defaults['manual_feed_enabled'], 'feed settings: subscription off by default' );
+
+$advtn_feed_clean = ADVTN_Settings::sanitize(
+	array(
+		'manual_feed_url'            => '  https://hawkeye-advision.web.app/trending/feed?feed=pbn-sample  ',
+		'manual_feed_token'          => "tok_ABC-123\n",
+		'manual_feed_interval_hours' => '0',
+		'manual_feed_enabled'        => '1',
+	)
+);
+
+// The whole endpoint, query string included — not a base other paths hang off,
+// which is why untrailingslashit() is wrong here and right for hub_url.
+advtn_assert_same( 'https://hawkeye-advision.web.app/trending/feed?feed=pbn-sample', $advtn_feed_clean['manual_feed_url'], 'feed settings: the URL is trimmed and kept whole, query string included' );
+advtn_assert_same( 'tok_ABC-123', $advtn_feed_clean['manual_feed_token'], 'feed settings: the token keeps its printable characters and loses whitespace' );
+advtn_assert_same( 1, $advtn_feed_clean['manual_feed_interval_hours'], 'feed settings: the interval clamps up to one hour' );
+advtn_assert_same( true, $advtn_feed_clean['manual_feed_enabled'], 'feed settings: the subscription toggle is a boolean' );
+
+advtn_assert_same( 168, ADVTN_Settings::sanitize( array( 'manual_feed_interval_hours' => 5000 ) )['manual_feed_interval_hours'], 'feed settings: the interval clamps down to a week' );
+advtn_assert_same( '', ADVTN_Settings::sanitize( array( 'manual_feed_url' => 'javascript:alert(1)' ) )['manual_feed_url'], 'feed settings: a non-http(s) URL is dropped' );
+advtn_assert_same( 'https://hawkeye-advision.web.app/trending/feed/', ADVTN_Settings::sanitize( array( 'manual_feed_url' => 'https://hawkeye-advision.web.app/trending/feed/' ) )['manual_feed_url'], 'feed settings: the URL is left exactly as given, trailing slash included' );
+
+// Both halves are required. A URL with the toggle off is a subscription somebody
+// paused and wants back without retyping; a toggle with no URL is a half-filled
+// form.
+$GLOBALS['advtn_test_options'] = array(
+	'advtn_settings' => array( 'manual_feed_url' => 'https://x.test/feed?feed=a', 'manual_feed_enabled' => true ),
+);
+advtn_assert_same( true, ( new ADVTN_Settings() )->feed_is_active(), 'feed settings: a URL plus the toggle means subscribed' );
+
+$GLOBALS['advtn_test_options'] = array(
+	'advtn_settings' => array( 'manual_feed_url' => '', 'manual_feed_enabled' => true ),
+);
+advtn_assert_same( false, ( new ADVTN_Settings() )->feed_is_active(), 'feed settings: the toggle alone is not a subscription' );
+
+$GLOBALS['advtn_test_options'] = array(
+	'advtn_settings' => array( 'manual_feed_url' => 'https://x.test/feed?feed=a', 'manual_feed_enabled' => false ),
+);
+advtn_assert_same( false, ( new ADVTN_Settings() )->feed_is_active(), 'feed settings: a paused subscription is not active' );
+
+// The interval is baked into the scheduled action, so a change to it has to
+// leave something behind for `init` to act on. Deferred through an option
+// rather than done here, because these settings are equally reachable from
+// WP-CLI and a migration, where the scheduler may not be loaded.
+$GLOBALS['advtn_test_options'] = array();
+( new ADVTN_Settings() )->update( array( 'manual_feed_interval_hours' => 12 ) );
+advtn_assert_same( 1, get_option( 'advtn_reschedule_feed' ), 'feed settings: changing the interval leaves a reschedule flag' );
+
+$GLOBALS['advtn_test_options'] = array();
+( new ADVTN_Settings() )->update( array( 'manual_feed_enabled' => true ) );
+advtn_assert_same( 1, get_option( 'advtn_reschedule_feed' ), 'feed settings: subscribing leaves a reschedule flag' );
+
+// Nothing to reschedule when the cadence did not move.
+$GLOBALS['advtn_test_options'] = array();
+( new ADVTN_Settings() )->update( array( 'heading_text' => 'Something else' ) );
+advtn_assert_same( false, get_option( 'advtn_reschedule_feed' ), 'feed settings: an unrelated change leaves no flag' );
+
+$GLOBALS['advtn_test_options'] = array();
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );

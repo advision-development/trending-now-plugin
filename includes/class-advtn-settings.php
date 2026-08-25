@@ -75,6 +75,17 @@ final class ADVTN_Settings {
 			'class_prefix'             => 'advtn',
 			'hub_url'                  => '',
 			'hub_secret'               => '',
+			// The curated-links subscription. A feed URL plus the toggle is what
+			// turns the manual links list into a read-only mirror of a remote
+			// one; either alone leaves the site editing its own links.
+			'manual_feed_url'          => '',
+			'manual_feed_token'        => '',
+			// Six hours, well under ingest_interval_hours' twenty. A curated link
+			// is an editorial decision somebody made minutes ago and expects to
+			// see. Its own clock precisely so the ingest interval need not move —
+			// that one also governs SerpAPI fetches, billed per fetch.
+			'manual_feed_interval_hours' => 6,
+			'manual_feed_enabled'      => false,
 			'ingest_secret'            => '',
 			'serpapi_key'              => '',
 			'github_token'             => '',
@@ -213,6 +224,22 @@ final class ADVTN_Settings {
 			update_option( 'advtn_flush_rewrites', 1, false );
 		}
 
+		// The recurring action bakes its interval in when it is scheduled, so
+		// changing the setting without rescheduling leaves the old cadence
+		// running — the number on screen and the thing actually happening would
+		// disagree with nothing to explain it.
+		//
+		// Deferred to `init` through an option, for the same reason and in the
+		// same place as the rewrite flush above: these settings are equally
+		// reachable from WP-CLI, a migration or a provisioning script, where
+		// Action Scheduler is not necessarily loaded at the moment of the write.
+		if (
+			$before['manual_feed_interval_hours'] !== $clean['manual_feed_interval_hours']
+			|| $before['manual_feed_enabled'] !== $clean['manual_feed_enabled']
+		) {
+			update_option( 'advtn_reschedule_feed', 1, false );
+		}
+
 		return $clean;
 	}
 
@@ -279,6 +306,16 @@ final class ADVTN_Settings {
 		$hub_url          = trim( (string) ( $input['hub_url'] ?? '' ) );
 		$out['hub_url']   = '' !== $hub_url ? untrailingslashit( esc_url_raw( $hub_url ) ) : '';
 
+		// Left exactly as given, unlike hub_url: this is a whole endpoint with a
+		// query string naming the feed, not a base other paths are appended to.
+		// untrailingslashit() here would break a feed served from a directory
+		// path.
+		$feed_url               = trim( (string) ( $input['manual_feed_url'] ?? '' ) );
+		$out['manual_feed_url'] = '' !== $feed_url ? esc_url_raw( $feed_url ) : '';
+
+		$out['manual_feed_interval_hours'] = self::clamp_int( $input['manual_feed_interval_hours'] ?? $d['manual_feed_interval_hours'], 1, 168 );
+		$out['manual_feed_enabled']        = ! empty( $input['manual_feed_enabled'] );
+
 		$out['auto_update']      = ! empty( $input['auto_update'] );
 		$out['purge_page_cache'] = ! empty( $input['purge_page_cache'] );
 
@@ -287,10 +324,27 @@ final class ADVTN_Settings {
 		$out['serpapi_key']  = (string) preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) ( $input['serpapi_key'] ?? '' ) );
 		$out['github_token'] = (string) preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) ( $input['github_token'] ?? '' ) );
 
+		// Same character class as the others. A feed may also be public, in which
+		// case this stays empty and the fetch carries no header at all.
+		$out['manual_feed_token'] = (string) preg_replace( '/[^A-Za-z0-9_\-]/', '', (string) ( $input['manual_feed_token'] ?? '' ) );
+
 		$out['hub_secret']    = preg_replace( '/[^A-Za-z0-9]/', '', (string) ( $input['hub_secret'] ?? '' ) ) ?? '';
 		$out['ingest_secret'] = preg_replace( '/[^A-Za-z0-9]/', '', (string) ( $input['ingest_secret'] ?? '' ) ) ?? '';
 
 		return $out;
+	}
+
+	/**
+	 * Whether this site's curated links are driven by a remote feed.
+	 *
+	 * Both halves are required. A URL with the toggle off is a subscription
+	 * somebody paused and wants back without retyping it; a toggle with no URL
+	 * is a half-filled form.
+	 *
+	 * @return bool
+	 */
+	public function feed_is_active(): bool {
+		return $this->get_bool( 'manual_feed_enabled' ) && '' !== trim( $this->get_string( 'manual_feed_url' ) );
 	}
 
 	/**
