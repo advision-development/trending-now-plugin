@@ -1,7 +1,7 @@
 # Trending Now — WordPress Plugin Specification
 
 **Version:** 1.0 (implementation spec)
-**Target:** WordPress 6.4+, PHP 8.1+, MySQL 5.7+/MariaDB 10.3+
+**Target:** WordPress 6.4+, PHP 7.4+, MySQL 5.7+/MariaDB 10.3+
 **Prefix:** `advtn` / `ADVTN` / `Advision\TrendingNow` — used for all functions, classes, DB tables, options, hooks, CSS classes, and REST namespaces.
 
 ---
@@ -13,7 +13,15 @@
 Renders a server-side "Trending Now" section on a WordPress site containing a configurable number of links (default 30) aggregated from:
 
 1. **Owned sites** — other WordPress installs in the network, pulled via their public REST API (RSS fallback).
-2. **News sources** — authoritative third-party articles pulled from the GDELT DOC 2.0 API, filtered to a domain allowlist.
+2. **News sources** — authoritative third-party articles, filtered to a domain allowlist.
+
+> **Stale, and not fixed here.** This document still describes GDELT as the news provider.
+> It was removed after 1.0.0 — it answered in 10–20 seconds against a rate limit — and
+> replaced by Google News via SerpAPI (`ADVTN_Source_SerpAPI`). §5.5 documents a source
+> class that no longer exists, and the one that does is unspecified. Flagged rather than
+> rewritten because it is unrelated to the change that touched this file; `gdelt`
+> deliberately survives in `ADVTN_Source_Base::news_types()` so rows ingested before the
+> removal keep their classification. See the CHANGELOG for 1.1.0.
 
 It also exposes a paginated "see all" archive at `/trending/` containing every retained item still inside the `max_age_hours` window.
 
@@ -241,8 +249,19 @@ Small scalar config, read on most requests.
   'hub_secret'              => '',         // spoke mode; shared with hub
   'ingest_secret'           => '',         // generated on activation; inbound trigger auth
   'delete_data_on_uninstall'=> false,
+
+  // Curated-links subscription — see §5.8.
+  'manual_feed_url'          => '',        // '' disables; stored exactly as typed
+  'manual_feed_token'        => '',        // optional; omitted entirely when empty
+  'manual_feed_interval_hours' => 6,       // 1-168; its own clock, not the ingest one
+  'manual_feed_enabled'      => false,
 ]
 ```
+
+`manual_feed_url` is stored **exactly as typed**, unlike `hub_url`, which is
+`untrailingslashit()`-ed. A feed URL carries a query string (`?feed=<slug>`) and trimming
+it would silently point the site at a different feed — or at the host's SPA fallback,
+which answers `200` with HTML rather than an error.
 
 `link_rel_external` applies **only** to `source_type = 'gdelt'`. Internal network links must remain plain followed links — that is the point of the plugin.
 
@@ -318,6 +337,9 @@ Additional standalone options:
 - `advtn_render_cache_keys` (array, autoload `no`) — registry of the above for purging.
 - `advtn_log` (array, autoload `no`) — capped ring buffer, 200 entries.
 - `advtn_ingest_lock` (int timestamp, autoload `no`) — see §6.3.
+- `advtn_manual_links` (array, autoload `no`) — the curated list (§5.8).
+- `advtn_manual_feed_state` (array, autoload `no`) — last fetch outcome, version, ETag, and
+  an attempts ring in the same shape as a source's (§6.8).
 
 ---
 
@@ -474,6 +496,73 @@ Never update `first_seen`, `first_shown_at`, `last_shown_at`, or `times_shown` o
 
 Return whether the row was an insert (`$wpdb->insert_id` behavior with `ON DUPLICATE KEY`: affected rows is 1 for insert, 2 for update) to populate `items_new`.
 
+
+### 5.8 Curated links, and subscribing them to a feed
+
+Curated links are hand-picked rows an operator adds through **Manual links**, stored in
+`advtn_manual_links` and injected into the pool as source `src_manual`. They predate this
+section of the spec; it is written now because the subscription cannot be described
+without them.
+
+**The problem.** The same links get typed into every site in the network. At ~160 sites
+that is not a chore, it is a guarantee of drift: every edit has to be repeated everywhere,
+and no two sites end up holding quite the same list.
+
+**The model.** One list is maintained centrally and each site pulls it on its own
+schedule. While `manual_feed_enabled` is on and `manual_feed_url` is set, **Manual links**
+becomes a read-only mirror of the feed: rows render disabled and every successful fetch
+replaces them wholesale. Unticking *Subscribed* leaves the links in place and editable
+again — turning off a sync must never delete content, and nothing changes on the front end
+at that moment.
+
+The feed is served by Hawkeye; its endpoint, request log and console are specified
+separately.
+
+#### Rules
+
+1. **A response is judged by its body, never its status code.** The feed is served from a
+   single-page app's host, whose unmatched paths answer `200` with the app's HTML. A client
+   treating `2xx` as success would record success on every request while nothing arrived —
+   on every subscribed site, from one renamed function or one dropped rewrite, for as long
+   as nobody checked. `ADVTN_Manual_Feed_Parser` requires the payload to carry **both** a
+   `feed` object and an `items` list; nothing else is a feed.
+
+2. **A failed fetch changes nothing.** Verified byte-for-byte against the stored list. This
+   runs unattended on sites nobody is watching, so a feed answering badly must cost them
+   nothing.
+
+3. **The commit goes through `ADVTN_Manual::save()`.** It already validates rows, forgets
+   the ones that left the list, syncs the items table and reschedules expiry. A second
+   write path would be a second definition of a valid link, and the two would drift.
+
+4. **A `401` does not mean the token is wrong.** The feed answers `401` for a gated feed
+   *and* for one that does not exist, identically and deliberately — distinguishing them
+   would let anybody map the network's feed names by guessing slugs. It is the one refusal
+   the plugin cannot diagnose, so its message names both causes rather than sending
+   somebody to check the field most likely to be correct.
+
+5. **An empty list is honoured.** "Empty means empty" holds here as everywhere else, and
+   clearing every subscribed site at once is something an operator will legitimately want.
+   It is logged as a warning, because it is also what an upstream mistake looks like.
+
+6. **The token is optional.** A public feed needs none, and the `Authorization` header is
+   then omitted entirely rather than sent empty — an empty bearer is a credential that
+   looks present and is not.
+
+#### What the feed carries, and what stays local
+
+Two sites subscribed to one feed store identical rows in identical order, including links
+sharing a position: the tiebreak is a property of the feed, so it resolves the same way
+everywhere. What does **not** travel:
+
+| Local to each site | Why |
+|---|---|
+| Row `id` | `uniqid()`-derived handles for the items table. Never leave the site. |
+| `times_shown`, `first_shown_at` | Exposure accounting is about *this* site's pages. Stamped when the selection is rebuilt (§7.3), not when the widget renders. |
+| Fetch state and attempts ring | Each site's own transport history. |
+
+The feed carries the editorial decision. Each site keeps its own accounting of it.
+
 ---
 
 ## 6. Scheduling and execution
@@ -586,7 +675,7 @@ if ( defined( 'WP_CLI' ) && WP_CLI ) {
 }
 ```
 
-Commands: `ingest [--source=<id>] [--force]`, `select`, `render`, `status`, `prune`. Convenience only — nothing may depend on CLI availability.
+Commands: `ingest [--source=<id>] [--force]`, `feed-fetch [--force]`, `select`, `render`, `status`, `prune`. Convenience only — nothing may depend on CLI availability.
 
 ### 6.8 Per-source attempt history and manual retry
 
@@ -673,6 +762,32 @@ upsert that source's items into the live selection — and the button that write
 one to offer for a source the operator has switched off. It also runs against the *stored*
 row rather than the on-screen one, the opposite of **Test fetch**, so the row's hint says so
 and the admin JS confirms before navigating away from an edited form.
+
+
+### 6.9 The subscription runs on its own clock
+
+`advtn_manual_feed_fetch` recurs at `manual_feed_interval_hours` (6 by default) with its
+own due-check, separate from the ingest cycle's twenty. Two different things are being
+scheduled: a curated link is an editorial decision somebody made minutes ago, and moving
+the ingest interval down to match would triple SerpAPI spend, which is billed per fetch.
+
+Like the ingest cycle it is a due-check rather than a fixed clock time, so a missed window
+runs late instead of being skipped, and it counts from the last **attempt** rather than the
+last success — a feed that is failing must not be retried on every pageview.
+
+This depends on WP-Cron, which runs on traffic rather than on a clock. On a PBN that is
+less of a problem than it sounds: the crawler this plugin exists to attract *is* the
+traffic that fires the schedule. For a site quiet enough that it matters,
+`POST /advtn/v1/feed-fetch` (§10.5) is the escape hatch — here genuinely a hatch, unlike
+§6.6, where the external trigger is the mechanism.
+
+**A forced fetch is unconditional.** `--force` skips the interval *and* the stored ETag.
+The second is not a convenience. `If-None-Match` is the site asserting "I already hold
+version N" — precisely the assertion somebody forcing a fetch has stopped believing.
+Sending it anyway lets the feed answer `304` to a site holding nothing, so the repair is
+refused in the one case it was requested, and reported as success. Recovery would then
+wait on an unrelated upstream edit bumping the version, on every subscribed site at once,
+with nothing on screen explaining the wait.
 
 ---
 
@@ -920,6 +1035,18 @@ Cache the response body in an option, regenerated on `advtn_finalize_cycle`. Ser
 
 Diagnostics for n8n monitoring. Returns everything on the diagnostics panel as JSON: `last_ingest`, per-source state, item counts by status and type, `selection_size`, `cache_populated`, `lock_held`, `loopback_ok`, plugin and DB versions. Have n8n alert on `last_ingest` older than 30 hours.
 
+
+### 10.5 `POST /advtn/v1/feed-fetch`
+
+Fetch the curated-links feed now. Signed exactly like §10.2 and sharing `ingest_secret`,
+but rate-limited under its own endpoint name so a burst of one cannot starve the other.
+
+Defaults to `force`, because an explicit trigger means now.
+
+Answers `200` with the outcome, or **`502` on a failed fetch** — never `200` carrying a
+failure in the body. Monitoring that watches status codes has to be able to see this, and
+the whole subscription is built on not trusting a `2xx` that arrived without content.
+
 ---
 
 ## 11. Network footprint
@@ -982,6 +1109,18 @@ Show:
 ### 12.4 Logger
 
 `ADVTN_Logger::log( string $level, string $message, array $context = [] )`. Levels `debug|info|warning|error`. Ring buffer capped at 200 entries in the `advtn_log` option. `debug` only recorded when `WP_DEBUG` is true. Never log secrets or full signatures.
+
+
+### 12.5 Manual links, and the subscription card
+
+The tab carries a subscription card — URL, token, interval, a *Subscribed* toggle, a
+**Fetch now** button, and a status list showing the last outcome, the feed version held,
+and when the next fetch is due.
+
+While subscribed, the link rows render `disabled` **and** `handle_save_manual()` refuses
+outright. Both are required and they are not redundant: `disabled` is a hint to a browser,
+and the server-side refusal is the permission. A post crafted by hand, or a stale tab left
+open from before the subscription was turned on, reaches the second one.
 
 ---
 
@@ -1056,6 +1195,21 @@ Phase 1 is complete when all of the following pass.
 - [ ] A broken source is visibly flagged on the diagnostics panel with its error message.
 - [ ] `GET /advtn/v1/status` returns valid JSON suitable for n8n alerting.
 - [ ] "Run ingest now" works from the admin.
+
+**Curated-links subscription**
+- [ ] A site with `manual_feed_enabled` off and a URL set makes no request at all.
+- [ ] A successful fetch replaces the curated list wholesale and the widget reflects it.
+- [ ] A feed answering `200` with the SPA's HTML is rejected, and the stored list is unchanged byte-for-byte.
+- [ ] So are: invalid JSON, a payload missing `feed`, and a payload missing `items`.
+- [ ] A `401` produces a message naming both the token and the slug as possible causes.
+- [ ] A second fetch with no upstream change sends `If-None-Match`, receives `304`, and writes nothing.
+- [ ] `--force` on a site whose list was emptied re-fetches unconditionally and restores it.
+- [ ] An empty `items` list empties the site and logs a warning.
+- [ ] A feed with no token configured omits the `Authorization` header entirely.
+- [ ] Unsubscribing leaves the links in place, editable, with no front-end change.
+- [ ] While subscribed, a hand-crafted POST to the manual-links form is refused server-side.
+- [ ] `POST /advtn/v1/feed-fetch` answers `401` unsigned, `401` on replay, and `502` on a failed fetch.
+- [ ] **Two sites subscribed to one feed hold identical rows in identical order, with independent `times_shown`.**
 
 **Hygiene**
 - [ ] `wp plugin verify-checksums`-clean structure; no PHP notices with `WP_DEBUG` and `WP_DEBUG_LOG` on.
