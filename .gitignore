@@ -12,6 +12,13 @@ Thumbs.db
 
 *.log
 *.sql
+
+# …except the one docker-compose mounts. Ignored by the line above, it is absent
+# from a fresh clone, so Docker creates a *directory* at the mount point and
+# MariaDB's entrypoint fails with "Can't read from a directory 'stdin'" — an
+# error that names neither the file nor the reason. The local stack could not
+# start from a clean checkout.
+!.docker/init-db.sql
 *.zip
 
 .idea/
