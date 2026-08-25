@@ -69,6 +69,41 @@ final class ADVTN_CLI {
 	}
 
 	/**
+	 * Fetch the curated-links feed.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--force]
+	 * : Bypass the due-check. Never bypasses the validity check.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp trending-now feed-fetch --force
+	 *
+	 * @subcommand feed-fetch
+	 *
+	 * @param array<int,string>    $args       Positional args.
+	 * @param array<string,string> $assoc_args Flags.
+	 * @return void
+	 */
+	public function feed_fetch( array $args, array $assoc_args ): void {
+		unset( $args );
+
+		$result = advtn()->manual_feed()->fetch( isset( $assoc_args['force'] ) );
+
+		switch ( $result['status'] ) {
+			case 'failed':
+				WP_CLI::error( $result['message'] );
+				break;
+			case 'ok':
+				WP_CLI::success( $result['message'] );
+				break;
+			default:
+				WP_CLI::log( $result['message'] );
+		}
+	}
+
+	/**
 	 * Rebuild and commit the selection.
 	 *
 	 * @return void

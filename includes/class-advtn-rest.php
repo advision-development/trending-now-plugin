@@ -72,6 +72,23 @@ final class ADVTN_REST {
 
 		register_rest_route(
 			self::NAMESPACE_V1,
+			'/feed-fetch',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'handle_feed_fetch' ),
+				'permission_callback' => array( $this, 'authorize_feed_fetch' ),
+				'args'                => array(
+					'force' => array(
+						'type'     => 'boolean',
+						'default'  => true,
+						'required' => false,
+					),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NAMESPACE_V1,
 			'/items',
 			array(
 				'methods'             => WP_REST_Server::READABLE,
@@ -117,6 +134,21 @@ final class ADVTN_REST {
 	}
 
 	/**
+	 * Signature check for /feed-fetch.
+	 *
+	 * The same secret as /ingest. Both are "an external scheduler telling this
+	 * site to do its job now", and a second secret would be a second thing to
+	 * rotate across the network for no gain in what it protects. The endpoint
+	 * name differs, so the two keep separate rate-limit buckets.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public function authorize_feed_fetch( WP_REST_Request $request ) {
+		return ADVTN_HMAC::verify( $request, $this->settings->get_string( 'ingest_secret' ), 'feed-fetch' );
+	}
+
+	/**
 	 * Signature check for /status.
 	 *
 	 * @param WP_REST_Request $request Request.
@@ -124,6 +156,26 @@ final class ADVTN_REST {
 	 */
 	public function authorize_status( WP_REST_Request $request ) {
 		return ADVTN_HMAC::verify( $request, $this->settings->get_string( 'ingest_secret' ), 'status' );
+	}
+
+	/**
+	 * Fetch the curated-links feed now.
+	 *
+	 * Defaults to forcing, because an explicit trigger means now — the local
+	 * timer is the thing that respects the due-check. This route exists for
+	 * hosts where WP-Cron only ticks when somebody visits, which on a quiet
+	 * site is not a schedule; it is the escape hatch, not the mechanism.
+	 *
+	 * A failed fetch answers 502 rather than 200-with-a-failure. A caller that
+	 * has to read the body to learn it failed is a caller that will not.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public function handle_feed_fetch( WP_REST_Request $request ): WP_REST_Response {
+		$result = advtn()->manual_feed()->fetch( (bool) $request->get_param( 'force' ) );
+
+		return new WP_REST_Response( $result, 'failed' === $result['status'] ? 502 : 200 );
 	}
 
 	/**
