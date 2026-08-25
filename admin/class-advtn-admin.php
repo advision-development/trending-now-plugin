@@ -59,6 +59,8 @@ final class ADVTN_Admin {
 		add_action( 'admin_post_advtn_save_settings', array( $this, 'handle_save_settings' ) );
 		add_action( 'admin_post_advtn_save_sources', array( $this, 'handle_save_sources' ) );
 		add_action( 'admin_post_advtn_save_manual', array( $this, 'handle_save_manual' ) );
+		add_action( 'admin_post_advtn_save_feed', array( $this, 'handle_save_feed' ) );
+		add_action( 'admin_post_advtn_fetch_feed', array( $this, 'handle_fetch_feed' ) );
 		add_action( 'admin_post_advtn_action', array( $this, 'handle_action' ) );
 		add_action( 'admin_post_advtn_export_sources', array( $this, 'handle_export_sources' ) );
 		add_action( 'admin_post_advtn_import_sources', array( $this, 'handle_import_sources' ) );
@@ -279,6 +281,14 @@ final class ADVTN_Admin {
 	 */
 	public function handle_save_manual(): void {
 		$this->guard( 'advtn_save_manual' );
+
+		// A disabled input is a hint to a browser, not a permission. While the
+		// list mirrors a feed, the only thing allowed to write it is a fetch.
+		if ( advtn()->settings()->feed_is_active() ) {
+			$this->redirect( 'manual', 'feed_locked' );
+
+			return;
+		}
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
 		$rows = isset( $_POST['links'] ) && is_array( $_POST['links'] ) ? (array) wp_unslash( $_POST['links'] ) : array();
@@ -1003,6 +1013,9 @@ final class ADVTN_Admin {
 
 		$messages = array(
 			'saved'                 => array( 'success', __( 'Saved.', 'trending-now' ) ),
+			'feed_fetched'          => array( 'success', __( 'Feed fetched. The curated list below is what it returned.', 'trending-now' ) ),
+			'feed_failed'           => array( 'error', __( 'The feed fetch failed. Your existing links are untouched — the reason is on the subscription card.', 'trending-now' ) ),
+			'feed_locked'           => array( 'warning', __( 'These links come from a feed and cannot be edited here. Untick “Subscribed” to edit them.', 'trending-now' ) ),
 			'partial'               => array( 'warning', __( 'Saved, but some rows were rejected.', 'trending-now' ) ),
 			'ingest_done'           => array( 'success', __( 'Ingest cycle ran and finished.', 'trending-now' ) ),
 			'ingest_partial'        => array( 'warning', __( 'Ingest cycle finished, but at least one source failed.', 'trending-now' ) ),
@@ -1058,6 +1071,53 @@ final class ADVTN_Admin {
 	 * @param string $action Nonce action.
 	 * @return void
 	 */
+	/**
+	 * Save the feed subscription fields.
+	 *
+	 * @return void
+	 */
+	public function handle_save_feed(): void {
+		$this->guard( 'advtn_save_feed' );
+
+		advtn()->settings()->update(
+			array(
+				'manual_feed_url'            => wp_unslash( (string) ( $_POST['manual_feed_url'] ?? '' ) ),
+				'manual_feed_token'          => wp_unslash( (string) ( $_POST['manual_feed_token'] ?? '' ) ),
+				'manual_feed_interval_hours' => (int) ( $_POST['manual_feed_interval_hours'] ?? 6 ),
+				'manual_feed_enabled'        => ! empty( $_POST['manual_feed_enabled'] ),
+			)
+		);
+
+		// The flag ADVTN_Settings::update() leaves is consumed on `init`, which
+		// already ran for this request. Acting on it here means the schedule
+		// matches the form before the page reloads rather than a pageview later.
+		if ( get_option( 'advtn_reschedule_feed' ) ) {
+			delete_option( 'advtn_reschedule_feed' );
+			advtn()->manual_feed()->reschedule();
+		}
+
+		$this->redirect( 'manual', 'saved' );
+	}
+
+	/**
+	 * Fetch the feed now, skipping the due-check.
+	 *
+	 * Skipping it is the point: somebody pressing this has just changed
+	 * something upstream and wants to see it, and the alternative is telling
+	 * them to wait up to six hours.
+	 *
+	 * @return void
+	 */
+	public function handle_fetch_feed(): void {
+		$this->guard( 'advtn_fetch_feed' );
+
+		$result = advtn()->manual_feed()->fetch( true );
+
+		$notice = 'failed' === $result['status'] ? 'feed_failed' : 'feed_fetched';
+
+		$this->redirect( 'manual', $notice );
+	}
+
 	private function guard( string $action ): void {
 		if ( ! current_user_can( self::CAPABILITY ) ) {
 			wp_die( esc_html__( 'You do not have permission to do that.', 'trending-now' ) );
