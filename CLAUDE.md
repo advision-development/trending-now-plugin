@@ -47,6 +47,7 @@ WP-CLI (optional, only registered when `WP_CLI` is defined):
 ```bash
 wp trending-now ingest [--source=<id>] [--force] [--sync]
 wp trending-now flush [--all] [--source=<id>] [--host=<host>] [--status=<s>] [--yes]
+wp trending-now feed-fetch [--force]
 wp trending-now select | render [--uncached] | status | prune | unlock | purge
 ```
 
@@ -69,10 +70,12 @@ includes/
   class-advtn-selector.php    three-tier slot allocation + rotation
   class-advtn-renderer.php    HTML build + option-backed render cache
   class-advtn-archive.php     rewrite rule, template, pagination, robots
-  class-advtn-rest.php        /ingest, /items, /status
+  class-advtn-rest.php        /ingest, /feed-fetch, /items, /status
   class-advtn-hmac.php        sign + verify
   sources/                    one class per source type behind ADVTN_Source_Interface
   class-advtn-manual.php      curated links: option CRUD, expiry, table sync
+  class-advtn-manual-feed.php        the subscription: fetch, state, commit
+  class-advtn-manual-feed-parser.php pure. decides whether a response was real
 admin/                        menu, four tab views, AJAX test-fetch
 templates/                    widget-list, widget-cards, archive (theme-overridable)
 blocks/trending-now/          block.json + build-free editor script
@@ -98,6 +101,14 @@ cache, release lock.
 
 The REST trigger (`POST /wp-json/advtn/v1/ingest`, HMAC-signed) calls the same
 `ADVTN_Ingest::run()`. It is the primary path; WP-Cron is the safety net.
+
+**The curated-links subscription runs on its own clock.** `advtn_manual_feed_fetch`
+recurs at `manual_feed_interval_hours` (6 by default) with its own due-check, separate
+from the ingest cycle's twenty — a curated link is an editorial decision somebody made
+minutes ago, and moving the ingest interval to match would triple SerpAPI spend, which is
+billed per fetch. `POST /wp-json/advtn/v1/feed-fetch` is the same escape hatch `/ingest`
+has, signed with the same secret; here it is genuinely a hatch rather than the mechanism,
+because Googlebot crawling a PBN site *is* the traffic that fires WP-Cron.
 
 ## Hard rules
 
@@ -134,6 +145,31 @@ These come from the spec and from failures already paid for. Do not relax them.
     exceptions. Admin forms need nonce + `current_user_can( 'manage_options' )`.
 15. `flush_rewrite_rules()` runs on activation/deactivation and on a deferred flag after
     a slug change — never on a plain `init`.
+
+## The curated-links subscription
+
+`manual_feed_url` plus `manual_feed_enabled` makes the curated list a read-only mirror of
+a feed. Four rules, and each cost something to learn:
+
+- **A response is judged by its body, never its status.** The feed's host answers 200 with
+  a single-page app's HTML for any unmatched path, so one letter wrong in the URL looks
+  exactly like success. `ADVTN_Manual_Feed_Parser` requires both a `feed` object and an
+  `items` list; nothing else is a feed.
+- **A failed fetch changes nothing.** Verified byte-for-byte against the stored list. This
+  runs unattended on sites nobody is watching, so a feed answering badly must cost them
+  nothing.
+- **The commit goes through `ADVTN_Manual::save()`.** It already validates rows, forgets
+  the ones that left, syncs the items table and reschedules expiry. A second write path
+  would be a second definition of a valid link, and the two would drift.
+- **A 401 does not mean the token is wrong.** The feed answers 401 for a gated feed *and*
+  for one that does not exist, deliberately — distinguishing them would let anybody map
+  the network's feed names by guessing slugs. It is the one refusal this plugin cannot
+  diagnose, so the message names both causes.
+
+The token is optional: a public feed needs none, and the `Authorization` header is omitted
+entirely rather than sent empty. While subscribed, the admin's rows render disabled *and*
+`handle_save_manual` refuses outright — the first is a hint to a browser, the second is
+the permission.
 
 ## Explicitly rejected
 

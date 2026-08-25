@@ -22,6 +22,7 @@ higher-authority properties.
 - [Quick start](#quick-start)
 - [Sources](#sources)
 - [Manual links](#manual-links)
+- [Subscribing to a feed](#subscribing-to-a-feed)
 - [Displaying the widget](#displaying-the-widget)
 - [The archive](#the-archive)
 - [How selection works](#how-selection-works)
@@ -185,6 +186,66 @@ Two deliberate differences from ingested sources:
   archive. When a timer runs out the list is rebuilt immediately via a scheduled action,
   rather than waiting for the next ingest cycle, which on the default interval could be
   20 hours away.
+
+## Subscribing to a feed
+
+Instead of typing the same curated links into every site in a network, a site can
+**subscribe** to a list maintained somewhere else. While subscribed, **Trending Now →
+Manual links** becomes a read-only mirror: the rows render disabled and every fetch
+replaces them.
+
+Four settings, on that same tab:
+
+| | |
+|---|---|
+| **Feed URL** | the whole address, query string included |
+| **Auth token** | optional — a public feed needs none |
+| **Fetch every** | hours, 1–168. Default 6 |
+| **Subscribed** | both this *and* a URL are required |
+
+Unticking **Subscribed** leaves the links in place and editable again. Nothing disappears
+from the front end at the moment somebody unticks a box; the site simply stops following
+the feed and starts diverging, which is the point of unsubscribing.
+
+### What it fetches, and when
+
+`advtn_manual_feed_fetch` recurs on its own clock, separate from the ingest cycle. Like
+that cycle it uses a **due-check**, so a missed window runs late rather than being skipped
+— and like that cycle it depends on WP-Cron, which runs on pageviews rather than on a
+clock. On a PBN that is less of a problem than it sounds: the crawler this plugin exists
+to attract *is* traffic, and its visit fires the schedule.
+
+For a site quiet enough that this matters, **`POST /wp-json/advtn/v1/feed-fetch`** is the
+escape hatch — signed with the same secret as `/ingest`, and documented under
+[REST API](#rest-api). There is also `wp trending-now feed-fetch [--force]`.
+
+Repeated fetches are cheap. The plugin sends the version it already holds as an
+`If-None-Match`, so a feed that has not changed answers `304` and nothing is written.
+
+### What can go wrong, and what it costs
+
+**Nothing, is the answer to the second half.** A failed fetch leaves the stored list
+exactly as it was; only a response that validated replaces anything.
+
+The failure worth understanding is the one that does not look like one:
+
+```
+GET /trending/feeeed?feed=whatever   →   200 OK
+<!doctype html><html>…
+```
+
+A feed served from a single-page app's host answers **200 with HTML** for any path it does
+not recognise. One letter wrong in the URL therefore looks exactly like success, on every
+subscribed site, for as long as nobody checks. So the plugin does not trust the status
+code: a payload counts only if its body carries both a `feed` object and an `items` list.
+
+The other refusal to know about is **`401`, which does not mean the token is wrong**. A
+feed may answer `401` because the token is missing or wrong — or because the feed named in
+the URL does not exist, which it answers identically on purpose so that nobody can discover
+which feeds exist by guessing. Check the slug as well as the token.
+
+The last fetch, its HTTP code, the number of links stored, the next due time and the last
+error are all on the subscription card.
 
 ## Displaying the widget
 
@@ -405,6 +466,7 @@ Requests are rejected outside a 300-second clock skew, replayed signatures are r
 | Endpoint | Purpose | Responses |
 |---|---|---|
 | `POST /ingest` | Trigger a cycle. Body `{"force":false,"source":"src_…"}`, both optional. | `202` scheduled · `200` not due · `409` lock held · `401` auth |
+| `POST /feed-fetch` | Fetch the curated-links feed now. Signed with `ingest_secret`, same as `/ingest`. Defaults to `force`, because an explicit trigger means now. Answers `502` on a failed fetch rather than `200` carrying a failure. | `200` · `502` fetch failed · `401` auth |
 | `GET /items` | Hub mode only. Serves the assembled list to spokes. Params `limit`, `exclude_host`, `since`, `types`. | `200` · `403` not a hub · `401` auth |
 | `GET /status` | Everything on the Diagnostics panel, as JSON. | `200` · `401` auth |
 
@@ -455,6 +517,7 @@ Optional. Registered only when `WP_CLI` is defined; nothing depends on it.
 
 ```bash
 wp trending-now ingest [--source=<id>] [--force] [--sync]
+wp trending-now feed-fetch [--force]
 wp trending-now select
 wp trending-now render [--uncached]
 wp trending-now status
@@ -524,6 +587,10 @@ crawled most often — that is where this earns its keep.
 | `see_all_text` | `See all trending stories` | |
 | `class_prefix` | `advtn` | Vary per site |
 | `hub_url` / `hub_secret` | — | Hub and spoke modes |
+| `manual_feed_url` | — | The feed to subscribe to, whole address |
+| `manual_feed_token` | — | Optional; empty means a public feed and no header sent |
+| `manual_feed_interval_hours` | `6` | 1–168 |
+| `manual_feed_enabled` | `false` | Needs a URL as well before it does anything |
 | `ingest_secret` | generated | Signs `/ingest` and `/status` |
 | `serpapi_key` | — | Required by SerpAPI sources. See constants below |
 | `github_token` | — | Only needed if the plugin repo is private |

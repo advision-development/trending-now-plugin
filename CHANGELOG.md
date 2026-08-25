@@ -5,6 +5,49 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] — 2026-08-25
+
+### Added
+
+- **A site can subscribe its curated links to a feed.** Instead of the same links being
+  typed into every site in a network, one list is maintained centrally and each site pulls
+  it on its own schedule. While subscribed, **Manual links** becomes a read-only mirror:
+  the rows render disabled and every fetch replaces them. Unticking *Subscribed* leaves the
+  links in place and editable again — turning off a sync must not delete content, and
+  nothing changes on the front end at that moment.
+
+  Four settings — `manual_feed_url`, `manual_feed_token`, `manual_feed_interval_hours`
+  (default 6) and `manual_feed_enabled`. The token is optional: a public feed needs none,
+  and the `Authorization` header is then omitted entirely rather than sent empty.
+
+- **`POST /wp-json/advtn/v1/feed-fetch`**, signed with the same secret as `/ingest`, and
+  `wp trending-now feed-fetch [--force]`. The local timer is the mechanism; this is the
+  escape hatch for a site quiet enough that WP-Cron rarely fires.
+
+### Notes for anybody debugging this later
+
+- **A response is judged by its body, never its status code.** A feed served from a
+  single-page app's host answers `200` with HTML for any unrecognised path, so one letter
+  wrong in the URL looks exactly like success — on every subscribed site, for as long as
+  nobody checks. A payload counts only if it carries both a `feed` object and an `items`
+  list.
+
+- **A failed fetch changes nothing**, verified byte-for-byte. This runs unattended on sites
+  nobody is watching, so a feed answering badly must cost them nothing.
+
+- **A `401` does not mean the token is wrong.** A feed answers `401` both for a gated feed
+  and for one that does not exist, identically and on purpose, so that nobody can discover
+  which feeds exist by guessing names. It is the one refusal this plugin cannot diagnose,
+  and the message says so rather than sending somebody to check the field most likely to be
+  correct.
+
+### Fixed
+
+- **The local development stack could not start from a clean checkout.** `.gitignore`'s
+  `*.sql` excluded `.docker/init-db.sql`, which `docker-compose.yml` mounts — so Docker
+  created a *directory* at the mount point and MariaDB died with `Can't read from a
+  directory 'stdin'`, an error naming neither the file nor the reason.
+
 ## [1.1.7] — 2026-08-10
 
 ### Added
