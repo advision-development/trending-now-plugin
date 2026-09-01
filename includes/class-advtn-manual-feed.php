@@ -31,6 +31,9 @@ final class ADVTN_Manual_Feed {
 	public const OPTION_STATE = 'advtn_manual_feed_state';
 	public const HOOK         = 'advtn_manual_feed_fetch';
 
+	/** The one-shot retry a pushed fetch queues when it arrived behind. */
+	public const HOOK_RETRY = 'advtn_manual_feed_sync_retry';
+
 	/** Matches the plugin's other outbound requests. */
 	public const USER_AGENT = 'AdvisionTrendingNow/1.0';
 
@@ -66,6 +69,7 @@ final class ADVTN_Manual_Feed {
 	 */
 	public function register_hooks(): void {
 		add_action( self::HOOK, array( $this, 'on_scheduled_fetch' ) );
+		add_action( self::HOOK_RETRY, array( $this, 'on_sync_retry' ) );
 	}
 
 	/**
@@ -195,6 +199,44 @@ final class ADVTN_Manual_Feed {
 		$this->settings->update( array( 'sync_key' => $key ) );
 
 		return $key;
+	}
+
+	/**
+	 * Should this site fetch once more, in a minute?
+	 *
+	 * Pure and static so the decision is testable without WordPress or a clock.
+	 * The scheduling is the caller's job and is one line; this is the part worth
+	 * holding in place.
+	 *
+	 * **The version is only compared when the slug matches.** A roster row on
+	 * the far end can be stale — a site that moved from one feed to another is
+	 * still listed under the old one until something prunes it — and two feeds'
+	 * version counters are unrelated integers. Comparing them is comparing
+	 * nothing, and it would schedule a retry that could never succeed.
+	 *
+	 * Numeric comparison, deliberately: as strings, '9' sorts after '41'.
+	 *
+	 * @param string $answered_slug    The slug the payload carried.
+	 * @param string $expected_feed    The slug the pusher expected, or ''.
+	 * @param string $answered_version The version the payload carried.
+	 * @param string $expected_version The version the pusher expected, or ''.
+	 * @return bool
+	 */
+	public static function retry_needed(
+		string $answered_slug,
+		string $expected_feed,
+		string $answered_version,
+		string $expected_version
+	): bool {
+		if ( '' === $answered_slug || '' === $expected_feed || $answered_slug !== $expected_feed ) {
+			return false;
+		}
+
+		if ( ! is_numeric( $answered_version ) || ! is_numeric( $expected_version ) ) {
+			return false;
+		}
+
+		return (float) $answered_version < (float) $expected_version;
 	}
 
 	/**
@@ -571,6 +613,20 @@ final class ADVTN_Manual_Feed {
 	 */
 	public function on_scheduled_fetch(): void {
 		$this->fetch( false );
+	}
+
+	/**
+	 * The one-shot retry after a pushed fetch arrived behind.
+	 *
+	 * Forced, because the point is to get past the far end's serving cache and
+	 * a due-check would refuse — the ordinary fetch happened a minute ago. The
+	 * outcome goes to the state and the log like any other; nobody is waiting on
+	 * a response, so there is nothing to return.
+	 *
+	 * @return void
+	 */
+	public function on_sync_retry(): void {
+		$this->fetch( true, 'sync' );
 	}
 
 	/**

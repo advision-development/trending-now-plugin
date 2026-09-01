@@ -18,6 +18,14 @@ final class ADVTN_REST {
 	public const HUB_CACHE_MAX    = 500;
 
 	/**
+	 * How long to wait before the one retry, in seconds.
+	 *
+	 * Sixty, matching the far end's serving cache, plus nothing: the cache TTL
+	 * is the invalidation, so a fetch after it has elapsed reads Firestore.
+	 */
+	private const SYNC_RETRY_DELAY = 60;
+
+	/**
 	 * Settings service.
 	 *
 	 * @var ADVTN_Settings
@@ -43,7 +51,7 @@ final class ADVTN_REST {
 	}
 
 	/**
-	 * Register all three routes.
+	 * Register all five routes.
 	 *
 	 * @return void
 	 */
@@ -82,6 +90,45 @@ final class ADVTN_REST {
 						'type'     => 'boolean',
 						'default'  => true,
 						'required' => false,
+					),
+				),
+			)
+		);
+
+		/*
+		 * A new route with its own credential, and not an argument to
+		 * /feed-fetch.
+		 *
+		 * /feed-fetch is HMAC-signed with ingest_secret, and that secret also
+		 * authorizes /ingest and /status. The far end holding one per site would
+		 * be a store of credentials that can trigger ingest across the whole
+		 * network and read each site's source configuration. This route does one
+		 * thing and holds a credential that can do only that thing.
+		 */
+		register_rest_route(
+			self::NAMESPACE_V1,
+			'/sync',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'handle_sync' ),
+				'permission_callback' => array( $this, 'authorize_sync' ),
+				'args'                => array(
+					/*
+					 * Both are labels, never instructions. Neither can change
+					 * what this site fetches — the URL is this site's own
+					 * setting — and that is the only reason they are safe to
+					 * accept from a caller at all.
+					 */
+					'expectedFeed'    => array(
+						'type'              => 'string',
+						'required'          => false,
+						'default'           => '',
+						'sanitize_callback' => static fn( $v ) => preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $v ) ),
+					),
+					'expectedVersion' => array(
+						'type'     => 'string',
+						'required' => false,
+						'default'  => '',
 					),
 				),
 			)
@@ -176,6 +223,98 @@ final class ADVTN_REST {
 		$result = advtn()->manual_feed()->fetch( (bool) $request->get_param( 'force' ) );
 
 		return new WP_REST_Response( $result, 'failed' === $result['status'] ? 502 : 200 );
+	}
+
+	/**
+	 * Make this site re-read its feed now.
+	 *
+	 * `fetch( true )` skips the due-check *and* the stored ETag. The second is
+	 * not a convenience: If-None-Match is this site asserting "I already hold
+	 * version N", which is exactly the assertion somebody forcing a fetch has
+	 * stopped believing.
+	 *
+	 * **The retry is scheduled, not slept through.** The far end's serving cache
+	 * is 60 seconds with no invalidation available, so a push fired just after a
+	 * save hands this site the previous version. Waiting 60 seconds inside the
+	 * request would put the response past a default nginx `fastcgi_read_timeout`
+	 * of 60 s — the pusher would read a 504 as a failed push and prune a site
+	 * that had synced correctly. Scheduling answers immediately and lets this
+	 * site repair itself.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public function handle_sync( WP_REST_Request $request ): WP_REST_Response {
+		$result = advtn()->manual_feed()->fetch( true, 'sync' );
+
+		$retry_queued = false;
+
+		if ( ADVTN_Manual_Feed::retry_needed(
+			(string) $result['feed'],
+			(string) $request->get_param( 'expectedFeed' ),
+			(string) $result['version'],
+			(string) $request->get_param( 'expectedVersion' )
+		) ) {
+			// Exactly one, and only if nothing is already queued. A retry that
+			// retried would turn a version that never moves into a site that
+			// never stops fetching.
+			if ( false === wp_next_scheduled( ADVTN_Manual_Feed::HOOK_RETRY ) ) {
+				wp_schedule_single_event( time() + self::SYNC_RETRY_DELAY, ADVTN_Manual_Feed::HOOK_RETRY );
+			}
+
+			$retry_queued  = true;
+			$result['status'] = 'stale';
+		}
+
+		return new WP_REST_Response(
+			array(
+				'status'       => $result['status'],
+				'feed'         => $result['feed'],
+				'version'      => $result['version'],
+				'count'        => $result['count'],
+				'skipped'      => $result['skipped'],
+				'retry_queued' => $retry_queued,
+			),
+			'failed' === $result['status'] ? 502 : 200
+		);
+	}
+
+	/**
+	 * Sync-key check for /sync.
+	 *
+	 * The rate limit runs first and unconditionally, so a caller cannot use the
+	 * endpoint as an oracle that answers faster when the key is absent than when
+	 * it is merely wrong.
+	 *
+	 * One refusal for every reason. "No key configured", "no header sent" and
+	 * "wrong key" are the same answer, because distinguishing them tells an
+	 * unauthenticated caller which sites have been pushed to before.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public function authorize_sync( WP_REST_Request $request ) {
+		$rate = ADVTN_HMAC::rate_limit( 'sync' );
+
+		if ( is_wp_error( $rate ) ) {
+			return $rate;
+		}
+
+		$presented = (string) $request->get_header( ADVTN_Sync_Key::HEADER );
+
+		if ( ! ADVTN_Sync_Key::matches(
+			$presented,
+			$this->settings->get_string( 'sync_key' ),
+			$this->settings->get_string( 'sync_key_previous' )
+		) ) {
+			return new WP_Error(
+				'advtn_sync_refused',
+				__( 'This request was not accepted.', 'trending-now' ),
+				array( 'status' => 401 )
+			);
+		}
+
+		return true;
 	}
 
 	/**

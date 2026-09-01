@@ -81,7 +81,7 @@ final class ADVTN_HMAC {
 			);
 		}
 
-		$rate = self::check_rate_limit( $endpoint );
+		$rate = self::rate_limit( $endpoint );
 		if ( is_wp_error( $rate ) ) {
 			return $rate;
 		}
@@ -113,10 +113,18 @@ final class ADVTN_HMAC {
 	/**
 	 * Fixed-window rate limit, tracked in a transient.
 	 *
+	 * Public because /sync needs the same bucket behaviour without the
+	 * signature check — it authenticates with a sync key instead. One
+	 * implementation of the window rather than two, because two would drift and
+	 * the drift would be invisible until somebody measured it.
+	 *
+	 * The buckets are keyed per endpoint, so /sync exhausting its window cannot
+	 * block /ingest.
+	 *
 	 * @param string $endpoint Endpoint key.
 	 * @return true|WP_Error
 	 */
-	private static function check_rate_limit( string $endpoint ) {
+	public static function rate_limit( string $endpoint ) {
 		$key   = 'advtn_rate_' . md5( $endpoint );
 		$count = (int) get_transient( $key );
 

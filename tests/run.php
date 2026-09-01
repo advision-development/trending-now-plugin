@@ -1131,6 +1131,41 @@ $advtn_broken = ADVTN_Manual_Feed_Parser::parse( 'not json at all' );
 advtn_assert_same( false, $advtn_broken['ok'], 'parse: garbage is not a feed' );
 advtn_assert_same( '', $advtn_broken['slug'], 'parse: a failure still carries a slug key' );
 
+/* -------------------------------------------------------------------------
+ * ADVTN_Manual_Feed::retry_needed()
+ *
+ * FEED_CACHE_MS on the far end is 60 seconds, per instance, with no
+ * invalidation available — the callable that saves runs in a different
+ * instance from the one serving, so nothing in the writer's process reaches
+ * the reader's memory. The TTL is the invalidation.
+ *
+ * So a push fired right after a save hands this site the previous version and
+ * its ETag, and the button reports success having changed nothing. The retry
+ * is what closes that window.
+ * ---------------------------------------------------------------------- */
+
+advtn_assert_same( true, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '40', '41' ), 'retry: the slug matches and the version arrived older' );
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '41', '41' ), 'retry: the expected version arrived' );
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '42', '41' ), 'retry: a newer version than expected is not a reason to fetch again' );
+
+// A stale roster row must not trigger a retry against another feed's version
+// numbers. Two feeds' version counters are unrelated integers, so comparing
+// them is comparing nothing.
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'other-feed', 'pbn-sample', '3', '41' ), 'retry: the slug differs, so the version is not compared' );
+
+// No expectation is not an expectation of zero.
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '40', '' ), 'retry: no expected version means nothing to be behind' );
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', '', '40', '41' ), 'retry: no expected feed means no comparison to make' );
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( '', 'pbn-sample', '40', '41' ), 'retry: a feed that answered no slug cannot be compared' );
+
+// Versions are integers on the wire. A non-numeric value is not a version, and
+// treating it as 0 would make every push retry.
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', 'abc', '41' ), 'retry: a non-numeric answered version is not behind' );
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '40', 'abc' ), 'retry: a non-numeric expectation is no expectation' );
+
+// String comparison would say '9' > '41'. This has to be numeric.
+advtn_assert_same( true, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '9', '41' ), 'retry: versions compare as numbers, not as strings' );
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );
