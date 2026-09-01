@@ -249,4 +249,5 @@ require_once dirname( __DIR__ ) . '/includes/sources/class-advtn-source-serpapi.
 require_once dirname( __DIR__ ) . '/includes/class-advtn-settings.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-updater.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-repository.php';
+require_once dirname( __DIR__ ) . '/includes/class-advtn-manual.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-archive.php';

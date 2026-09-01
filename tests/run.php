@@ -1166,6 +1166,50 @@ advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sa
 // String comparison would say '9' > '41'. This has to be numeric.
 advtn_assert_same( true, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '9', '41' ), 'retry: versions compare as numbers, not as strings' );
 
+/* -------------------------------------------------------------------------
+ * Regenerating the sync key
+ *
+ * Not automatic and not on a schedule. The worst an attacker does with a
+ * captured key is make one site re-read its own feed, which it does every six
+ * hours anyway — so automatic rotation buys almost nothing and costs a real
+ * fragility: the far end's roster write is best-effort, so any dropped write
+ * would leave it holding a key the site no longer accepts.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['advtn_test_options'] = array();
+
+$advtn_feed_settings = new ADVTN_Settings();
+$advtn_first_key     = ADVTN_Sync_Key::generate();
+$advtn_feed_settings->update( array( 'sync_key' => $advtn_first_key ) );
+
+$advtn_feed = new ADVTN_Manual_Feed( $advtn_feed_settings, new ADVTN_Manual( $advtn_feed_settings, new ADVTN_Repository() ) );
+
+advtn_assert_same( true, $advtn_feed->regenerate_sync_key(), 'regenerate: reports success' );
+
+$advtn_second_key = $advtn_feed_settings->get_string( 'sync_key' );
+
+advtn_assert_same( false, $advtn_second_key === $advtn_first_key, 'regenerate: the current key changed' );
+advtn_assert_same( true, ADVTN_Sync_Key::is_wellformed( $advtn_second_key ), 'regenerate: the new key is well formed' );
+
+// The old one is kept so the far end, which learns keys only by being called,
+// is not blind until this site's next fetch — up to six hours, and the person
+// who just regenerated because they suspected a leak is the last one who
+// should be told to wait.
+advtn_assert_same( $advtn_first_key, $advtn_feed_settings->get_string( 'sync_key_previous' ), 'regenerate: the old key becomes the previous one' );
+advtn_assert_same( true, ADVTN_Sync_Key::matches( $advtn_first_key, $advtn_second_key, $advtn_feed_settings->get_string( 'sync_key_previous' ) ), 'regenerate: the old key still matches' );
+
+// Two values, never three. A second regeneration drops the oldest.
+$advtn_feed->regenerate_sync_key();
+
+advtn_assert_same( $advtn_second_key, $advtn_feed_settings->get_string( 'sync_key_previous' ), 'regenerate: the second regeneration drops the oldest key' );
+advtn_assert_same(
+	false,
+	ADVTN_Sync_Key::matches( $advtn_first_key, $advtn_feed_settings->get_string( 'sync_key' ), $advtn_feed_settings->get_string( 'sync_key_previous' ) ),
+	'regenerate: the key from two regenerations ago no longer matches'
+);
+
+$GLOBALS['advtn_test_options'] = array();
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );

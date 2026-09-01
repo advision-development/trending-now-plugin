@@ -220,6 +220,16 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 				<p class="description"><?php esc_html_e( 'Unticking this leaves the current links in place and editable again. Nothing disappears from the front end.', 'trending-now' ); ?></p>
 			</td>
 		</tr>
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Push credential', 'trending-now' ); ?></th>
+			<td>
+				<?php if ( '' === $settings->get_string( 'sync_key' ) ) : ?>
+					<p class="description"><?php esc_html_e( 'None yet. This site invents one the first time it fetches a feed, and the feed learns it from that request — there is nothing to copy anywhere.', 'trending-now' ); ?></p>
+				<?php else : ?>
+					<p class="description"><?php esc_html_e( 'In place. It lets the feed tell this site to re-read now instead of waiting for the timer, and it can do nothing else — not trigger an ingest, not read this site\'s sources.', 'trending-now' ); ?></p>
+				<?php endif; ?>
+			</td>
+		</tr>
 	</table>
 
 	<?php if ( ! empty( $advtn_feed_state ) ) : ?>
@@ -272,6 +282,15 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 
 	<?php submit_button( __( 'Save subscription', 'trending-now' ), 'primary', 'submit', false ); ?>
 </form>
+
+<?php if ( '' !== $settings->get_string( 'sync_key' ) ) : ?>
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="advtn-inline-form" style="margin: 12px 0 20px;">
+		<?php wp_nonce_field( 'advtn_action' ); ?>
+		<input type="hidden" name="action" value="advtn_action" />
+		<button type="submit" class="button advtn-confirm" name="advtn_do" value="regenerate_sync_key"><?php esc_html_e( 'Replace push credential', 'trending-now' ); ?></button>
+		<span class="description"><?php esc_html_e( 'Replace it if you think it leaked. The old one keeps working until the feed learns the new one, which happens on this site\'s next fetch.', 'trending-now' ); ?></span>
+	</form>
+<?php endif; ?>
 
 <?php if ( $advtn_feed_active ) : ?>
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin: 12px 0 20px;">

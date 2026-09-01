@@ -202,6 +202,36 @@ final class ADVTN_Manual_Feed {
 	}
 
 	/**
+	 * Replace the sync key, keeping the old one usable.
+	 *
+	 * Two values and never three. The previous key exists so a deliberate
+	 * regeneration does not blind the far end until this site's next fetch —
+	 * it learns keys only by being called — and the operator who just
+	 * regenerated because they suspected a leak is the last person who should be
+	 * told to wait six hours. A third would extend the life of a key somebody
+	 * decided to retire.
+	 *
+	 * @return bool False if no key could be generated.
+	 */
+	public function regenerate_sync_key(): bool {
+		try {
+			$fresh = ADVTN_Sync_Key::generate();
+		} catch ( Throwable $e ) {
+			ADVTN_Logger::log( 'warning', 'Could not generate a sync key.' );
+			return false;
+		}
+
+		$this->settings->update(
+			array(
+				'sync_key_previous' => $this->settings->get_string( 'sync_key' ),
+				'sync_key'          => $fresh,
+			)
+		);
+
+		return true;
+	}
+
+	/**
 	 * Should this site fetch once more, in a minute?
 	 *
 	 * Pure and static so the decision is testable without WordPress or a clock.

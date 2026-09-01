@@ -803,6 +803,16 @@ final class ADVTN_Admin {
 				$notice = 'secret_regenerated';
 				break;
 
+			// Its own notice rather than reusing secret_regenerated: that message
+			// says "update any external caller", which does not apply here — the
+			// feed learns the new key from the fetch this site already makes, so
+			// nobody has anything to update.
+			case 'regenerate_sync_key':
+				advtn()->manual_feed()->regenerate_sync_key();
+				$tab    = 'manual';
+				$notice = 'sync_key_regenerated';
+				break;
+
 			default:
 				$notice = 'unknown';
 		}
@@ -1027,6 +1037,7 @@ final class ADVTN_Admin {
 			'loopback_ok'           => array( 'success', __( 'Loopback request succeeded.', 'trending-now' ) ),
 			'loopback_failed'       => array( 'error', __( 'Loopback request failed. Action Scheduler cannot run on this host until that is fixed.', 'trending-now' ) ),
 			'secret_regenerated'    => array( 'success', __( 'Secret regenerated. Update any external caller.', 'trending-now' ) ),
+			'sync_key_regenerated'  => array( 'success', __( 'The push credential was replaced. The old one keeps working until the feed learns the new one, on this site\'s next fetch.', 'trending-now' ) ),
 			'imported'              => array( 'success', __( 'Sources imported.', 'trending-now' ) ),
 			'items_deleted'         => array( 'success', __( 'Items deleted.', 'trending-now' ) ),
 			'nothing_selected'      => array( 'warning', __( 'No items were selected.', 'trending-now' ) ),
