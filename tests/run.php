@@ -981,6 +981,55 @@ advtn_assert_same( false, ADVTN_Sync_Key::matches( $advtn_key_a, '', $advtn_key_
 advtn_assert_same( false, ADVTN_Sync_Key::matches( substr( $advtn_key_a, 0, 32 ), $advtn_key_a, '' ), 'matches: a prefix of the key' );
 advtn_assert_same( false, ADVTN_Sync_Key::matches( strtoupper( $advtn_key_a ), $advtn_key_a, '' ), 'matches: the key in a different case' );
 
+/* -------------------------------------------------------------------------
+ * The sync key survives a settings save
+ *
+ * sanitize() starts from defaults() and assigns only the keys it knows. A key
+ * it does not handle is reset on every save — so this is not a nicety, it is
+ * the difference between a credential and a credential that works until
+ * somebody presses Save Settings.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['advtn_test_options'] = array();
+
+$advtn_stored_key = ADVTN_Sync_Key::generate();
+$advtn_old_key    = ADVTN_Sync_Key::generate();
+
+advtn_assert_same( '', ADVTN_Settings::defaults()['sync_key'], 'settings: a fresh install has no sync key' );
+advtn_assert_same( '', ADVTN_Settings::defaults()['sync_key_previous'], 'settings: a fresh install has no previous key' );
+
+$advtn_clean = ADVTN_Settings::sanitize(
+	array(
+		'sync_key'          => $advtn_stored_key,
+		'sync_key_previous' => $advtn_old_key,
+	)
+);
+
+advtn_assert_same( $advtn_stored_key, $advtn_clean['sync_key'], 'sanitize: a well-formed key is kept' );
+advtn_assert_same( $advtn_old_key, $advtn_clean['sync_key_previous'], 'sanitize: a well-formed previous key is kept' );
+
+// The value is never typed by a person, so anything that is not the stored
+// shape is a value that arrived by a route nobody designed. Dropped rather
+// than repaired.
+advtn_assert_same( '', ADVTN_Settings::sanitize( array( 'sync_key' => 'not-a-key' ) )['sync_key'], 'sanitize: a malformed key is dropped, not repaired' );
+advtn_assert_same( '', ADVTN_Settings::sanitize( array( 'sync_key' => strtoupper( $advtn_stored_key ) ) )['sync_key'], 'sanitize: an uppercase key is not the stored form' );
+advtn_assert_same( '', ADVTN_Settings::sanitize( array() )['sync_key'], 'sanitize: absent means empty' );
+
+// The regression this task exists for. Saving an unrelated field must not
+// clear the credential.
+$advtn_settings = new ADVTN_Settings();
+$advtn_settings->update( array( 'sync_key' => $advtn_stored_key ) );
+$advtn_settings->update( array( 'heading_text' => 'Something Else' ) );
+
+advtn_assert_same(
+	$advtn_stored_key,
+	$advtn_settings->get_string( 'sync_key' ),
+	'settings: saving an unrelated field leaves the sync key alone'
+);
+advtn_assert_same( 'Something Else', $advtn_settings->get_string( 'heading_text' ), 'settings: the unrelated field did change' );
+
+$GLOBALS['advtn_test_options'] = array();
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );
