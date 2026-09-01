@@ -601,7 +601,7 @@ crawled most often — that is where this earns its keep.
 | `ingest_secret` | generated | Signs `/ingest` and `/status` |
 | `serpapi_key` | — | Required by SerpAPI sources. See constants below |
 | `github_token` | — | Only needed if the plugin repo is private |
-| `auto_update` | `true` | Offer updates from GitHub releases |
+| `auto_update` | `true` | Check GitHub releases, and install them without being asked. `advtn_auto_update` refuses the unattended half; this switches off both |
 | `purge_page_cache` | `true` | Clear the host page cache when the list changes |
 | `delete_data_on_uninstall` | `false` | |
 
@@ -642,13 +642,35 @@ The plugin carries an `Update URI` header pointing at its GitHub repository, so
 WordPress routes update checks here instead of to wordpress.org — which also removes any
 risk of an unrelated plugin with the same slug being installed over it.
 
-New releases appear on the Plugins screen like any other update, and WordPress's own
-per-plugin auto-update toggle works normally. **Diagnostics → Check for updates** forces
-an immediate check; results are cached for six hours otherwise.
+**The plugin keeps itself current.** A release installs itself on WordPress's next update
+run rather than waiting for somebody to open each site's Plugins screen — a network running
+several versions of this plugin serves several different widgets. The `advtn_auto_update`
+filter is the way out for a site that must not take unattended updates:
 
-The updater prefers the `.zip` asset attached to the release, because it unpacks to a
-clean `trending-now/` directory with `vendor/` bundled. It falls back to GitHub's
-generated zipball, which unpacks to `owner-repo-<sha>/` and is renamed on the way in.
+```php
+add_filter( 'advtn_auto_update', '__return_false' );
+```
+
+The *Keep this plugin updated* setting turns checking off entirely, which also stops
+anything being offered.
+
+Because updates are applied without being asked, WordPress's per-plugin auto-update toggle
+is replaced on the Plugins screen with a sentence, the state of the last check, and a
+**Check for a new release now** link. The toggle is gone rather than merely ignored: it
+could be switched off and change nothing, which is worse than not being there.
+**Diagnostics → Check for updates** does the same thing from the plugin's own screens.
+Results are cached for six hours, and failures for one.
+
+The updater installs the `.zip` asset attached to the release and nothing else — it unpacks
+to a clean `trending-now/` directory with `vendor/` bundled. A release with no such asset
+offers no update: GitHub's generated zipball carries the development tree with no
+`vendor/`, so installing it would leave a plugin whose Action Scheduler is missing.
+
+**The download URL is checked, not trusted.** It has to begin with
+`https://github.com/advision-development/trending-now-plugin/releases/download/` and
+contain no `..`, and the asset has to be named `trending-now-*.zip`. WordPress unzips this
+over the plugin directory and runs it, so a tampered response has to install nothing rather
+than install from wherever it points.
 
 If the repository is private, set a **GitHub token** under Settings → Security: a
 fine-grained personal access token with read-only Contents access. Without it the check
