@@ -875,6 +875,65 @@ advtn_assert_same( '1.3.0', ADVTN_Updater::version_of( '1.3.0' ), 'updater: a ba
 advtn_assert_same( '', ADVTN_Updater::version_of( 'main' ), 'updater: a tag naming a branch is not a version' );
 advtn_assert_same( '', ADVTN_Updater::version_of( 'v1.2.0-rc1' ), 'updater: a pre-release tag is not a version' );
 
+/* -------------------------------------------------------------------------
+ * ADVTN_Manual_Feed::identity()
+ *
+ * What a site says about itself on a feed fetch. Two query parameters and no
+ * new endpoint: the feed already fetches every few hours, and a feed that does
+ * not know these parameters serves exactly what it served before.
+ * ---------------------------------------------------------------------- */
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.example', 'v' => '1.2.0' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.example', '1.2.0' ),
+	'identity: sends the home URL and the version'
+);
+
+// A parameter present and empty is a claim that this site has no address.
+// Absent is the truthful "this plugin did not say", and the far end treats a
+// missing value as bookkeeping it simply does not do.
+advtn_assert_same(
+	array( 'v' => '1.2.0' ),
+	ADVTN_Manual_Feed::identity( '', '1.2.0' ),
+	'identity: omits an empty home rather than sending it blank'
+);
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.example' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.example', '' ),
+	'identity: omits an empty version'
+);
+
+advtn_assert_same(
+	array(),
+	ADVTN_Manual_Feed::identity( '', '' ),
+	'identity: says nothing when it has nothing to say'
+);
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.example', 'v' => '1.2.0' ),
+	ADVTN_Manual_Feed::identity( '  https://mysite.example  ', "\t1.2.0\n" ),
+	'identity: trims both'
+);
+
+// A subdirectory install sends its whole home. The far end keeps only the
+// origin, so the directory is lost there — recorded rather than worked around,
+// because measured across the network on 2026-09-01 no install is in one.
+advtn_assert_same(
+	array( 'site' => 'https://mysite.example/blog', 'v' => '1.2.0' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.example/blog', '1.2.0' ),
+	'identity: sends a subdirectory home unchanged'
+);
+
+// home_url() is the only source. There is deliberately no setting for this: a
+// typed field is a field filled in wrong, and the far end turns this value into
+// an address it will later contact.
+advtn_assert_same(
+	array( 'site' => rtrim( ADVTN_TEST_HOME, '/' ), 'v' => '9.9.9' ),
+	ADVTN_Manual_Feed::identity( rtrim( home_url(), '/' ), '9.9.9' ),
+	'identity: what home_url() gives is what is sent'
+);
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );

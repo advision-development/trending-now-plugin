@@ -254,6 +254,20 @@ which feeds exist by guessing. Check the slug as well as the token.
 The last fetch, its HTTP code, the number of links stored, the next due time and the last
 error are all on the subscription card.
 
+### What the site tells the feed about itself
+
+Every fetch carries two extra query parameters — `site`, which is this install's
+`home_url()`, and `v`, the plugin version. They let whoever runs the feed see which sites
+subscribe and which version each is on; without them a subscriber is only an IP address, and
+shared hosting puts several sites behind one.
+
+`site` is taken from `home_url()` and is deliberately **not** a setting. The value identifies
+this install to the feed, so a field somebody could type wrong is a field that points the
+feed at the wrong site.
+
+Nothing else changes. A feed that does not recognise the parameters serves exactly what it
+served before, so upgrading is safe whatever the feed is running.
+
 ## Displaying the widget
 
 Three entry points, one renderer.
