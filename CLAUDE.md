@@ -178,6 +178,20 @@ a feed. Four rules, and each cost something to learn:
   repair is refused in the one case it was asked for — and reported as success. See
   `ADVTN_Manual_Feed::conditional_etag()`; the reasoning is on the method.
 
+**A site identifies itself on the fetch it already makes.** `ADVTN_Manual_Feed::identity()`
+adds `site` and `v` to the request — no new endpoint, no handshake, and a feed that does not
+know them serves what it always served, so this never needs a coordinated deploy. Three rules:
+
+- **`site` is `home_url()` and never a setting.** A typed field is a field filled in wrong,
+  and the far end turns this value into an address it will later contact — a mistake there is
+  a request aimed at somebody else's site.
+- **Empty is omitted, not sent blank.** A parameter present and empty claims this site has no
+  address; absent is the truthful "this plugin did not say", which the far end treats as
+  bookkeeping it does not do.
+- **`identity()` is pure and static, and the URL is assembled by `add_query_arg()`.** The
+  parameters are the decision this plugin makes and are unit-tested; core's URL builder is
+  core's job, and stubbing it would let a test pass against a stub that differs from it.
+
 The token is optional: a public feed needs none, and the `Authorization` header is omitted
 entirely rather than sent empty. While subscribed, the admin's rows render disabled *and*
 `handle_save_manual` refuses outright — the first is a hint to a browser, the second is
