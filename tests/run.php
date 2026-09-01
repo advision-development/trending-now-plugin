@@ -936,6 +936,53 @@ advtn_assert_same(
 
 /* ---------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------------
+ * ADVTN_Sync_Key
+ *
+ * The credential Hawkeye presents to say "fetch now". A leaked one buys an
+ * attacker one thing: making a site re-read the feed it re-reads every six
+ * hours anyway. That is the whole reason it is not `ingest_secret`, which also
+ * authorizes /ingest and /status.
+ * ---------------------------------------------------------------------- */
+
+$advtn_key_a = ADVTN_Sync_Key::generate();
+$advtn_key_b = ADVTN_Sync_Key::generate();
+
+advtn_assert_same( 64, strlen( $advtn_key_a ), 'sync key: 64 hex characters' );
+advtn_assert_same( 1, preg_match( '/^[0-9a-f]{64}$/', $advtn_key_a ), 'sync key: lowercase hex only' );
+advtn_assert_same( false, $advtn_key_a === $advtn_key_b, 'sync key: two generated keys differ' );
+
+advtn_assert_same( true, ADVTN_Sync_Key::is_wellformed( $advtn_key_a ), 'wellformed: a generated key' );
+advtn_assert_same( false, ADVTN_Sync_Key::is_wellformed( '' ), 'wellformed: empty is not a key' );
+advtn_assert_same( false, ADVTN_Sync_Key::is_wellformed( str_repeat( 'a', 63 ) ), 'wellformed: too short' );
+advtn_assert_same( false, ADVTN_Sync_Key::is_wellformed( str_repeat( 'a', 65 ) ), 'wellformed: too long' );
+advtn_assert_same( false, ADVTN_Sync_Key::is_wellformed( str_repeat( 'A', 64 ) ), 'wellformed: uppercase is not the stored form' );
+advtn_assert_same( false, ADVTN_Sync_Key::is_wellformed( str_repeat( 'z', 64 ) ), 'wellformed: non-hex characters' );
+
+advtn_assert_same( true, ADVTN_Sync_Key::matches( $advtn_key_a, $advtn_key_a, '' ), 'matches: the current key' );
+
+// The previous key is accepted so a deliberate regeneration does not blind
+// Hawkeye until that site's next fetch, up to six hours. There is no automatic
+// rotation; this exists for the operator who regenerated because they suspected
+// a leak, and who is the last person who should be told to wait.
+advtn_assert_same( true, ADVTN_Sync_Key::matches( $advtn_key_b, $advtn_key_a, $advtn_key_b ), 'matches: the previous key' );
+
+advtn_assert_same( false, ADVTN_Sync_Key::matches( ADVTN_Sync_Key::generate(), $advtn_key_a, $advtn_key_b ), 'matches: an unrelated key' );
+
+// Empty is the state of a site that has never fetched. Treating it as a match
+// would make every such site answerable by anybody who found the route.
+advtn_assert_same( false, ADVTN_Sync_Key::matches( '', '', '' ), 'matches: nothing presented against nothing stored' );
+advtn_assert_same( false, ADVTN_Sync_Key::matches( '', $advtn_key_a, '' ), 'matches: nothing presented' );
+advtn_assert_same( false, ADVTN_Sync_Key::matches( $advtn_key_a, '', '' ), 'matches: nothing stored' );
+advtn_assert_same( false, ADVTN_Sync_Key::matches( $advtn_key_a, '', $advtn_key_a ), 'matches: a previous key with no current one is not accepted' );
+
+// A prefix is not a match. hash_equals() is what holds this, and a naive
+// substring or `==` comparison would also leak length by timing.
+advtn_assert_same( false, ADVTN_Sync_Key::matches( substr( $advtn_key_a, 0, 32 ), $advtn_key_a, '' ), 'matches: a prefix of the key' );
+advtn_assert_same( false, ADVTN_Sync_Key::matches( strtoupper( $advtn_key_a ), $advtn_key_a, '' ), 'matches: the key in a different case' );
+
+/* ---------------------------------------------------------------------- */
+
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );
 
 exit( $advtn_failed > 0 ? 1 : 0 );

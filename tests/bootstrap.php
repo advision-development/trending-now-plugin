@@ -242,6 +242,7 @@ require_once dirname( __DIR__ ) . '/includes/class-advtn-attempts.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-manual-feed-parser.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-manual-feed.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-hmac.php';
+require_once dirname( __DIR__ ) . '/includes/class-advtn-sync-key.php';
 require_once dirname( __DIR__ ) . '/includes/sources/interface-advtn-source.php';
 require_once dirname( __DIR__ ) . '/includes/sources/class-advtn-source-base.php';
 require_once dirname( __DIR__ ) . '/includes/sources/class-advtn-source-serpapi.php';
