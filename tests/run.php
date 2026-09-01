@@ -1030,6 +1030,56 @@ advtn_assert_same( 'Something Else', $advtn_settings->get_string( 'heading_text'
 
 $GLOBALS['advtn_test_options'] = array();
 
+/* -------------------------------------------------------------------------
+ * identity() gains a trigger
+ *
+ * A claim the site makes about itself, which this project normally refuses to
+ * record — admitted here because it is a label on a log row rather than an
+ * authorization, and there is no other way to know from the log side why a
+ * fetch happened. The job document is the authoritative record of "we pushed";
+ * where the two disagree, the job document is right.
+ * ---------------------------------------------------------------------- */
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0' ),
+	'identity: no trigger means no trigger parameter'
+);
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0', 'trigger' => 'sync' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', 'sync' ),
+	'identity: a trigger is appended after site and v'
+);
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', '   ' ),
+	'identity: a whitespace trigger is nothing, not a blank parameter'
+);
+
+// A closed vocabulary, and refused rather than sanitised. The value reaches a
+// log column on the far end; anything this side cannot name is a value nobody
+// chose.
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', 'something-else' ),
+	'identity: an unknown trigger is dropped, not passed through'
+);
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0', 'trigger' => 'manual' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', 'manual' ),
+	'identity: manual is a known trigger'
+);
+
+// The existing contract, restated so a change to the signature cannot lose it.
+advtn_assert_same(
+	array(),
+	ADVTN_Manual_Feed::identity( '', '', 'sync' ),
+	'identity: a trigger alone says nothing about which site this is'
+);
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );

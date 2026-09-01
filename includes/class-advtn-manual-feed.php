@@ -93,6 +93,18 @@ final class ADVTN_Manual_Feed {
 	}
 
 	/**
+	 * Known triggers.
+	 *
+	 * A closed vocabulary rather than a free string. The value lands in a log
+	 * column on the far end, so anything this side cannot name is a value
+	 * nobody chose — refused rather than sanitised, because sanitising invents
+	 * a value where dropping admits there was none.
+	 *
+	 * @var array<int,string>
+	 */
+	private const TRIGGERS = array( 'sync', 'manual' );
+
+	/**
 	 * What this site says about itself on a feed fetch.
 	 *
 	 * Two query parameters, and they are the whole of the plugin's half of the
@@ -123,12 +135,15 @@ final class ADVTN_Manual_Feed {
 	 *
 	 * @param string $home    The site's home URL.
 	 * @param string $version The running plugin version.
+	 * @param string $trigger Why this fetch is happening. One of TRIGGERS, or
+	 *                        empty for the ordinary scheduled fetch.
 	 * @return array<string,string>
 	 */
-	public static function identity( string $home, string $version ): array {
+	public static function identity( string $home, string $version, string $trigger = '' ): array {
 		$identity = array();
 		$home     = trim( $home );
 		$version  = trim( $version );
+		$trigger  = trim( $trigger );
 
 		if ( '' !== $home ) {
 			$identity['site'] = $home;
@@ -138,7 +153,48 @@ final class ADVTN_Manual_Feed {
 			$identity['v'] = $version;
 		}
 
+		// A trigger alone says nothing about which site this is: it is a label
+		// on the other two, not a third fact, so it is withheld when neither
+		// site nor version made it into the identity.
+		if ( ! empty( $identity ) && in_array( $trigger, self::TRIGGERS, true ) ) {
+			$identity['trigger'] = $trigger;
+		}
+
 		return $identity;
+	}
+
+	/**
+	 * This site's sync key, generating one the first time it is needed.
+	 *
+	 * Generated here rather than on activation, because a site that never
+	 * subscribes to a feed never needs a push credential — and a credential
+	 * that exists on every install is a credential on installs nobody is
+	 * watching.
+	 *
+	 * A generation failure is not fatal. `random_bytes()` throws where no
+	 * source of randomness is available, and the fetch is the product: a site
+	 * that cannot invent a key still pulls its links, it just cannot be pushed.
+	 * Hawkeye reads that absence as `unpushable` and reports it by name.
+	 *
+	 * @return string The key, or '' if one could not be made.
+	 */
+	public function ensure_sync_key(): string {
+		$key = $this->settings->get_string( 'sync_key' );
+
+		if ( ADVTN_Sync_Key::is_wellformed( $key ) ) {
+			return $key;
+		}
+
+		try {
+			$key = ADVTN_Sync_Key::generate();
+		} catch ( Throwable $e ) {
+			ADVTN_Logger::log( 'warning', 'Could not generate a sync key; this site cannot be pushed to.' );
+			return '';
+		}
+
+		$this->settings->update( array( 'sync_key' => $key ) );
+
+		return $key;
 	}
 
 	/**
@@ -192,12 +248,15 @@ final class ADVTN_Manual_Feed {
 	/**
 	 * Fetch the feed and, if it answered properly, make it this site's list.
 	 *
-	 * @param bool $force Skip the due-check and the stored ETag. Never skips the
-	 *                    validity check: a forced fetch still has to be answered
-	 *                    by something shaped like a feed before anything is kept.
+	 * @param bool   $force   Skip the due-check and the stored ETag. Never skips
+	 *                        the validity check: a forced fetch still has to be
+	 *                        answered by something shaped like a feed before
+	 *                        anything is kept.
+	 * @param string $trigger Why this fetch is happening. Passed through to
+	 *                        identity() so the request log can say why.
 	 * @return array{status:string,message:string,count:int,skipped:int}
 	 */
-	public function fetch( bool $force = false ): array {
+	public function fetch( bool $force = false, string $trigger = '' ): array {
 		if ( ! $this->settings->feed_is_active() ) {
 			return $this->outcome( 'subscribed_off', __( 'This site is not subscribed to a feed.', 'trending-now' ) );
 		}
@@ -212,7 +271,7 @@ final class ADVTN_Manual_Feed {
 			return $this->fail( __( 'The feed URL is not a valid public http(s) address.', 'trending-now' ), null, 0 );
 		}
 
-		$response = $this->request( $url, $force );
+		$response = $this->request( $url, $force, $trigger );
 
 		if ( is_wp_error( $response['response'] ) ) {
 			return $this->fail( $response['response']->get_error_message(), null, $response['ms'] );
@@ -330,11 +389,12 @@ final class ADVTN_Manual_Feed {
 	 * rather than sent empty — a public feed needs none, and an empty bearer is
 	 * a credential that looks present and is not.
 	 *
-	 * @param string $url   Feed URL.
-	 * @param bool   $force  Ask unconditionally, ignoring the stored ETag.
+	 * @param string $url     Feed URL.
+	 * @param bool   $force   Ask unconditionally, ignoring the stored ETag.
+	 * @param string $trigger Why this fetch is happening, passed through to identity().
 	 * @return array{response:array|WP_Error,code:int|null,body:string,ms:int,etag:string}
 	 */
-	private function request( string $url, bool $force = false ): array {
+	private function request( string $url, bool $force = false, string $trigger = '' ): array {
 		$started = microtime( true );
 		$token   = $this->settings->get_secret( 'manual_feed_token' );
 		$etag    = self::conditional_etag( (string) ( $this->state()['etag'] ?? '' ), $force );
@@ -342,12 +402,25 @@ final class ADVTN_Manual_Feed {
 		// Appended rather than concatenated: the configured URL already carries
 		// `?feed=<slug>`, and add_query_arg() is what gets the separator right
 		// whether or not it does.
-		$url = add_query_arg( self::identity( home_url(), ADVTN_VERSION ), $url );
+		$url = add_query_arg( self::identity( home_url(), ADVTN_VERSION, $trigger ), $url );
 
 		$headers = array( 'Accept' => 'application/json' );
 
 		if ( '' !== $token ) {
 			$headers['Authorization'] = 'Bearer ' . $token;
+		}
+
+		/*
+		 * The key travels on the fetch this site already makes, which is the
+		 * whole reason nothing has to be distributed to fifty installs: Hawkeye
+		 * learns it by being called. A header rather than a query parameter —
+		 * a parameter lands in the far end's access logs and in any CDN in
+		 * front of them, the same reason the feed token is in Authorization.
+		 */
+		$sync_key = $this->ensure_sync_key();
+
+		if ( '' !== $sync_key ) {
+			$headers[ ADVTN_Sync_Key::HEADER ] = $sync_key;
 		}
 
 		if ( '' !== $etag ) {
