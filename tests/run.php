@@ -1080,6 +1080,57 @@ advtn_assert_same(
 	'identity: a trigger alone says nothing about which site this is'
 );
 
+/* -------------------------------------------------------------------------
+ * The parser reads which feed answered
+ *
+ * Hawkeye compares this against the feed it pushed for. A site that moved from
+ * feed A to feed B is still in A's roster until something prunes it, and
+ * pushing it would record `ok` for a site that did not refresh A — a false
+ * success, which is the exact shape of failure this project has already paid
+ * for once.
+ * ---------------------------------------------------------------------- */
+
+$advtn_feed_body = wp_json_encode(
+	array(
+		'feed'  => array( 'slug' => 'pbn-sample', 'name' => 'PBN Sample', 'version' => 41 ),
+		'items' => array(
+			array( 'url' => 'https://example.com/a', 'title' => 'A' ),
+		),
+	)
+);
+
+$advtn_parsed = ADVTN_Manual_Feed_Parser::parse( (string) $advtn_feed_body );
+
+advtn_assert_same( true, $advtn_parsed['ok'], 'parse: a well-formed payload' );
+advtn_assert_same( 'pbn-sample', $advtn_parsed['slug'], 'parse: the slug is read out of the feed object' );
+advtn_assert_same( '41', $advtn_parsed['version'], 'parse: the version is still read' );
+
+// Absent rather than guessed. A feed serving no slug is one this plugin cannot
+// compare, and inventing one from the request would make every comparison
+// agree with itself.
+$advtn_no_slug = ADVTN_Manual_Feed_Parser::parse(
+	(string) wp_json_encode( array( 'feed' => array( 'version' => 7 ), 'items' => array() ) )
+);
+
+advtn_assert_same( '', $advtn_no_slug['slug'], 'parse: a payload with no slug reports none' );
+advtn_assert_same( true, $advtn_no_slug['ok'], 'parse: a missing slug is not a parse failure' );
+
+// A non-scalar slug is not a slug. An array here would become "Array" under a
+// string cast and compare equal to nothing, which is right by accident rather
+// than on purpose.
+$advtn_odd_slug = ADVTN_Manual_Feed_Parser::parse(
+	(string) wp_json_encode( array( 'feed' => array( 'slug' => array( 'x' ) ), 'items' => array() ) )
+);
+
+advtn_assert_same( '', $advtn_odd_slug['slug'], 'parse: a non-scalar slug reports none' );
+
+// The failure shape carries the key too, so every caller can read it without
+// checking which branch it came from.
+$advtn_broken = ADVTN_Manual_Feed_Parser::parse( 'not json at all' );
+
+advtn_assert_same( false, $advtn_broken['ok'], 'parse: garbage is not a feed' );
+advtn_assert_same( '', $advtn_broken['slug'], 'parse: a failure still carries a slug key' );
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );

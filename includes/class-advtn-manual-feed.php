@@ -254,7 +254,7 @@ final class ADVTN_Manual_Feed {
 	 *                        anything is kept.
 	 * @param string $trigger Why this fetch is happening. Passed through to
 	 *                        identity() so the request log can say why.
-	 * @return array{status:string,message:string,count:int,skipped:int}
+	 * @return array{status:string,message:string,count:int,skipped:int,feed:string,version:string}
 	 */
 	public function fetch( bool $force = false, string $trigger = '' ): array {
 		if ( ! $this->settings->feed_is_active() ) {
@@ -293,7 +293,14 @@ final class ADVTN_Manual_Feed {
 				''
 			);
 
-			return $this->outcome( 'not_modified', __( 'The feed has not changed since the last fetch.', 'trending-now' ) );
+			return array(
+				'status'  => 'not_modified',
+				'message' => __( 'The feed has not changed since the last fetch.', 'trending-now' ),
+				'count'   => 0,
+				'skipped' => 0,
+				'feed'    => (string) ( $this->state()['feed'] ?? '' ),
+				'version' => (string) ( $this->state()['version'] ?? '' ),
+			);
 		}
 
 		if ( 200 !== $response['code'] ) {
@@ -334,7 +341,7 @@ final class ADVTN_Manual_Feed {
 	 *
 	 * @param array<string,mixed>                                                       $parsed   Parser result.
 	 * @param array{response:array|WP_Error,code:int|null,body:string,ms:int,etag:string} $response Transport result.
-	 * @return array{status:string,message:string,count:int,skipped:int}
+	 * @return array{status:string,message:string,count:int,skipped:int,feed:string,version:string}
 	 */
 	private function commit( array $parsed, array $response ): array {
 		$result = $this->manual->save( $parsed['rows'] );
@@ -354,6 +361,7 @@ final class ADVTN_Manual_Feed {
 				'error'           => '',
 				'item_count'      => $stored,
 				'skipped'         => $skipped,
+				'feed'            => (string) $parsed['slug'],
 				'version'         => (string) $parsed['version'],
 				'etag'            => (string) $response['etag'],
 			),
@@ -375,6 +383,8 @@ final class ADVTN_Manual_Feed {
 			'message' => sprintf( __( 'Stored %1$d link(s), skipped %2$d.', 'trending-now' ), $stored, $skipped ),
 			'count'   => $stored,
 			'skipped' => $skipped,
+			'feed'    => (string) $parsed['slug'],
+			'version' => (string) $parsed['version'],
 		);
 	}
 
@@ -464,7 +474,7 @@ final class ADVTN_Manual_Feed {
 	 * @param string   $message Reason.
 	 * @param int|null $code    HTTP status, null on a transport error.
 	 * @param int      $ms      Elapsed milliseconds.
-	 * @return array{status:string,message:string,count:int,skipped:int}
+	 * @return array{status:string,message:string,count:int,skipped:int,feed:string,version:string}
 	 */
 	private function fail( string $message, ?int $code, int $ms ): array {
 		$message = $this->redact( $message );
@@ -488,6 +498,8 @@ final class ADVTN_Manual_Feed {
 			'message' => $message,
 			'count'   => 0,
 			'skipped' => 0,
+			'feed'    => '',
+			'version' => '',
 		);
 	}
 
@@ -535,7 +547,7 @@ final class ADVTN_Manual_Feed {
 	 *
 	 * @param string $status  Status key.
 	 * @param string $message Human-readable reason.
-	 * @return array{status:string,message:string,count:int,skipped:int}
+	 * @return array{status:string,message:string,count:int,skipped:int,feed:string,version:string}
 	 */
 	private function outcome( string $status, string $message ): array {
 		return array(
@@ -543,6 +555,8 @@ final class ADVTN_Manual_Feed {
 			'message' => $message,
 			'count'   => 0,
 			'skipped' => 0,
+			'feed'    => '',
+			'version' => '',
 		);
 	}
 

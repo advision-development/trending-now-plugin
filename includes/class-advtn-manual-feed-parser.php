@@ -34,7 +34,7 @@ final class ADVTN_Manual_Feed_Parser {
 	 * Parse a response body.
 	 *
 	 * @param string $body Raw response body.
-	 * @return array{ok:bool,code:string,error:string,version:string,count:int,skipped:int,rows:array<int,array<string,mixed>>}
+	 * @return array{ok:bool,code:string,error:string,slug:string,version:string,count:int,skipped:int,rows:array<int,array<string,mixed>>}
 	 */
 	public static function parse( string $body ): array {
 		$decoded = json_decode( trim( $body ), true );
@@ -78,10 +78,23 @@ final class ADVTN_Manual_Feed_Parser {
 			? (string) $decoded['feed']['version']
 			: '';
 
+		/*
+		 * Which feed answered. Hawkeye compares this against the feed it pushed
+		 * for; a mismatch means the site moved and its roster row is stale.
+		 *
+		 * Read out of the payload and never echoed from anything the caller
+		 * supplied — an echoed value would make the comparison agree with
+		 * itself, which is worse than not comparing.
+		 */
+		$slug = isset( $decoded['feed']['slug'] ) && is_scalar( $decoded['feed']['slug'] )
+			? (string) $decoded['feed']['slug']
+			: '';
+
 		return array(
 			'ok'      => true,
 			'code'    => '',
 			'error'   => '',
+			'slug'    => $slug,
 			'version' => $version,
 			'count'   => count( $rows ),
 			'skipped' => $skipped,
@@ -171,13 +184,14 @@ final class ADVTN_Manual_Feed_Parser {
 	 *
 	 * @param string $code    One of the CODE_* constants.
 	 * @param string $message Human-readable reason.
-	 * @return array{ok:bool,code:string,error:string,version:string,count:int,skipped:int,rows:array<int,array<string,mixed>>}
+	 * @return array{ok:bool,code:string,error:string,slug:string,version:string,count:int,skipped:int,rows:array<int,array<string,mixed>>}
 	 */
 	private static function failure( string $code, string $message ): array {
 		return array(
 			'ok'      => false,
 			'code'    => $code,
 			'error'   => $message,
+			'slug'    => '',
 			'version' => '',
 			'count'   => 0,
 			'skipped' => 0,
