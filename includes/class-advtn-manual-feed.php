@@ -93,6 +93,55 @@ final class ADVTN_Manual_Feed {
 	}
 
 	/**
+	 * What this site says about itself on a feed fetch.
+	 *
+	 * Two query parameters, and they are the whole of the plugin's half of the
+	 * subscriber roster. There is no new endpoint and no handshake: the feed
+	 * already fetches every few hours, so identifying itself on that request
+	 * costs nothing and needs no coordinated deploy — the feed ignores
+	 * parameters it does not know, and a feed that does not know these two
+	 * serves exactly what it served before.
+	 *
+	 * **`site` is `home_url()` and never a field somebody types.** A typed field
+	 * is a field filled in wrong, and the far end turns this value into an
+	 * address it will later contact — so a mistake here is a request aimed at
+	 * somebody else's site. `home_url()` is the one value WordPress already
+	 * holds and already uses to build every link it prints.
+	 *
+	 * Only the origin survives on the other side; the path is discarded there,
+	 * so a subdirectory install sends its full home and loses the directory.
+	 * That is recorded rather than worked around: measured across the network on
+	 * 2026-09-01, no install is in a subdirectory.
+	 *
+	 * Empty values are omitted rather than sent blank. A parameter that is
+	 * present and empty is a claim that this site has no address, where absent
+	 * is the truthful "this plugin did not say".
+	 *
+	 * Pure and static so the decision is testable without WordPress; the URL is
+	 * assembled by `add_query_arg()`, which is core's job and not worth a stub
+	 * that could differ from it.
+	 *
+	 * @param string $home    The site's home URL.
+	 * @param string $version The running plugin version.
+	 * @return array<string,string>
+	 */
+	public static function identity( string $home, string $version ): array {
+		$identity = array();
+		$home     = trim( $home );
+		$version  = trim( $version );
+
+		if ( '' !== $home ) {
+			$identity['site'] = $home;
+		}
+
+		if ( '' !== $version ) {
+			$identity['v'] = $version;
+		}
+
+		return $identity;
+	}
+
+	/**
 	 * Stored fetch state.
 	 *
 	 * @return array<string,mixed>
@@ -289,6 +338,11 @@ final class ADVTN_Manual_Feed {
 		$started = microtime( true );
 		$token   = $this->settings->get_secret( 'manual_feed_token' );
 		$etag    = self::conditional_etag( (string) ( $this->state()['etag'] ?? '' ), $force );
+
+		// Appended rather than concatenated: the configured URL already carries
+		// `?feed=<slug>`, and add_query_arg() is what gets the separator right
+		// whether or not it does.
+		$url = add_query_arg( self::identity( home_url(), ADVTN_VERSION ), $url );
 
 		$headers = array( 'Accept' => 'application/json' );
 

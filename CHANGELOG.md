@@ -5,6 +5,131 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **The updater installed whatever URL the release response named.** `resolve_package()`
+  took `browser_download_url` out of GitHub's JSON and handed it to WordPress, which
+  downloads it, unzips it over the plugin directory and runs it on the next request — and
+  when no asset matched it fell back to `zipball_url`, also verbatim. Nothing checked the
+  host, the owner or the repository.
+
+  The download URL is now checked against a prefix compiled into the plugin,
+  `https://github.com/advision-development/trending-now-plugin/releases/download/`, and
+  refused if it contains `..`. The second check is not belt-and-braces: HTTP clients
+  resolve dot segments out of a path before sending the request (RFC 3986), so
+  `…/releases/download/../../../../someone/their-repo/…` starts with that prefix, passes,
+  and downloads from another account — still on `github.com`, still answered `200`, and not
+  this plugin. The asset's **name** has to match `trending-now-*.zip` as well, so a release
+  carrying several files cannot have one of the others installed as the plugin.
+
+  With a GitHub token the asset still goes through `api.github.com`, because the storage
+  redirect rejects an `Authorization` header. That URL is built here from the same pinned
+  prefix and an integer id, so it is safe by construction and deliberately not
+  prefix-checked afterwards — a guard no input can reach is a guard no test can hold in
+  place.
+
+### Added
+
+- **The plugin keeps itself updated.** `auto_update_plugin` is answered for this plugin
+  only, so a release installs itself on WordPress's next update run instead of waiting for
+  somebody to open each site's Plugins screen. A network running several versions of this
+  plugin serves several different widgets, which is the reason.
+
+  **The way out is a filter**, `advtn_auto_update`, so a site that must not take unattended
+  updates can refuse from its own mu-plugin. The *Keep this plugin updated* setting is the
+  site-level switch and turns off checking entirely.
+
+  Worth stating plainly: every other check here assumes the danger is a tampered answer, and
+  none of them help if a release is genuinely published from the pinned repository by
+  somebody who should not have been able to publish it. Unattended updates turn that from
+  "every site whose operator clicked" into "every site". The mitigation is the release
+  account, not this code.
+
+- **The Plugins screen says what the last check knew.** WordPress's auto-update toggle is
+  replaced with a sentence, the state of the last check, and a *Check for a new release now*
+  link. The toggle is replaced rather than left in place because it could be switched off
+  and change nothing — a control that looks like it works and does not.
+
+
+- **A site now says which site it is when it fetches the feed.** Two optional query
+  parameters go out with the request the plugin already makes every few hours:
+
+  ```
+  GET <feed url>&site=<home_url()>&v=<plugin version>
+  ```
+
+  There is no new endpoint and no handshake. A feed that does not know these parameters
+  serves exactly what it served before, so this needs no coordinated deploy — and the
+  central console can finally tell one subscriber from another. Until now the only thing
+  distinguishing them was an IP address, and an IP is not a site: measured across the
+  network on 2026-09-01, 144 hostnames resolve to 150 addresses with one shared server
+  holding seven of them.
+
+  **`site` is `home_url()` and never a field somebody types.** A typed field is a field
+  filled in wrong, and the far end turns this value into an address it will later contact —
+  so a mistake there is a request aimed at somebody else's site. `home_url()` is the value
+  WordPress already uses to build every link it prints.
+
+  Empty values are omitted rather than sent blank: a parameter present and empty is a claim
+  that this site has no address, where absent is the truthful "this plugin did not say".
+
+### Fixed
+
+- **A failed check is now remembered for an hour.** Every failure returned before the
+  transient was written, so a site whose check failed asked GitHub again on the next check.
+  GitHub allows 60 unauthenticated requests an hour **per IP** and a hosting provider's
+  sites share one, which is how one rate-limited site is what keeps it rate-limited. The
+  reason is stored with it and printed, because a check that silently found nothing is
+  indistinguishable from one that never ran.
+
+- **Diagnostics no longer fetches while rendering.** The Latest release row called
+  `latest_release()`, so every load of that tab was another request to the API. It reads
+  `status()` now, which never leaves the site.
+
+- **An up-to-date plugin reports itself instead of staying silent.** `check_for_update()`
+  answered `false` when no update was available, which puts the plugin in neither
+  `$updates->response` nor `$updates->no_update` — and WordPress reads `no_update` to decide
+  whether a row offers automatic updates at all, which is where the state and the re-check
+  link are printed. `wp_update_plugins()` compares the versions and routes the answer
+  itself, so a known release is now always reported. It cannot cause a downgrade: a release
+  behind the installed copy fails that comparison and lands in `no_update`.
+
+- **Versions are padded to three components before being compared.**
+  `version_compare( '1.2', '1.2.0' )` reports less-than, so an unpadded comparison against a
+  two-component header cleared a site that had an update waiting. A tag is also validated
+  rather than trimmed — `ltrim( $tag, 'vV' )` let a tag naming a branch through as though it
+  were a version.
+
+- **There is no zipball fallback.** GitHub's generated archive is the development tree with
+  no `vendor/`, so it installed a plugin whose Action Scheduler was absent and which
+  degraded to WP-Cron silently. No recognised asset now means no update offered.
+
+### Notes for anybody debugging this later
+
+- **The asset name and the repository name are different strings**, and both are pinned.
+  `bin/release` builds `trending-now-<version>.zip` while the repository is
+  `trending-now-plugin`. The sibling scanner plugins use one constant for both because in
+  them the two happen to match; copying that check here would refuse every legitimate
+  release.
+
+- **The release cache is a blog transient, not a site transient.** The scanners use site
+  transients and record that uninstall then has to delete them as such. These are separate
+  single-site installs rather than a network, so the two are equivalent here — and
+  `uninstall.php` clears `_transient_advtn_%` through `$wpdb`, which a change of scope would
+  quietly step around.
+
+- **Only the origin survives on the other side.** The path is discarded there, so a
+  subdirectory install sends its full home and loses the directory. Recorded rather than
+  worked around: no install in the network is in a subdirectory, measured rather than
+  assumed.
+
+- `ADVTN_Manual_Feed::identity()` is pure and static so the decision is testable without
+  WordPress. The URL is assembled by `add_query_arg()`, which is core's job — the parameters
+  are what this plugin decides, and a stub of core's URL builder could differ from it while
+  the test still passed.
+
 ## [1.2.0] — 2026-08-25
 
 ### Added

@@ -714,6 +714,226 @@ advtn_assert_same( false, get_option( 'advtn_reschedule_feed' ), 'feed settings:
 
 $GLOBALS['advtn_test_options'] = array();
 
+/* -------------------------------------------------------------------------
+ * ADVTN_Updater::package_in()
+ *
+ * The pinning. Everything in a release response is remote text, including the
+ * URL WordPress is about to download and unzip over the plugin directory.
+ * ---------------------------------------------------------------------- */
+
+$advtn_download = 'https://github.com/advision-development/trending-now-plugin/releases/download/';
+
+/**
+ * One release asset, as GitHub reports it.
+ *
+ * @param string $name Asset file name.
+ * @param string $url  Browser download URL.
+ * @param int    $id   Asset id.
+ * @return array<string,mixed>
+ */
+function advtn_asset( string $name, string $url, int $id = 7 ): array {
+	return array(
+		'name'                 => $name,
+		'browser_download_url' => $url,
+		'id'                   => $id,
+	);
+}
+
+$advtn_good_url = $advtn_download . 'v1.3.0/trending-now-1.3.0.zip';
+
+advtn_assert_same(
+	$advtn_good_url,
+	ADVTN_Updater::package_in( array( advtn_asset( 'trending-now-1.3.0.zip', $advtn_good_url ) ) )['url'],
+	'updater: the zip we publish is accepted'
+);
+
+// A URL's authority ends at the first slash after the scheme, so the pinned
+// prefix cannot be satisfied by a host that merely starts with ours.
+advtn_assert_same(
+	'',
+	ADVTN_Updater::package_in(
+		array(
+			advtn_asset(
+				'trending-now-1.3.0.zip',
+				'https://github.com.evil.test/advision-development/trending-now-plugin/releases/download/v1.3.0/trending-now-1.3.0.zip'
+			),
+		)
+	)['url'],
+	'updater: a lookalike host is refused'
+);
+
+// The scheme is inside the prefix, so this cannot be downgraded either.
+advtn_assert_same(
+	'',
+	ADVTN_Updater::package_in(
+		array( advtn_asset( 'trending-now-1.3.0.zip', 'http://github.com/advision-development/trending-now-plugin/releases/download/v1.3.0/trending-now-1.3.0.zip' ) )
+	)['url'],
+	'updater: plain http is refused'
+);
+
+// HTTP clients resolve `..` out of a path before sending it — RFC 3986's
+// remove_dot_segments — so a prefix pins the host but not the repository.
+// This starts with the prefix, and downloads from another account.
+advtn_assert_same(
+	'',
+	ADVTN_Updater::package_in(
+		array(
+			advtn_asset(
+				'trending-now-1.3.0.zip',
+				$advtn_download . '../../../../someone/their-repo/releases/download/v1/trending-now-1.3.0.zip'
+			),
+		)
+	)['url'],
+	'updater: a dot-segment escape to another repository is refused'
+);
+
+// A release carrying several files must not have one of the others installed
+// as the plugin.
+advtn_assert_same(
+	'',
+	ADVTN_Updater::package_in(
+		array( advtn_asset( 'something-else.zip', $advtn_download . 'v1.3.0/something-else.zip' ) )
+	)['url'],
+	'updater: an asset that is not our zip is refused'
+);
+
+advtn_assert_same(
+	'',
+	ADVTN_Updater::package_in(
+		array( advtn_asset( 'trending-now-1.3.0.tar.gz', $advtn_download . 'v1.3.0/trending-now-1.3.0.tar.gz' ) )
+	)['url'],
+	'updater: an asset that is not a zip is refused'
+);
+
+advtn_assert_same(
+	'',
+	ADVTN_Updater::package_in( array() )['url'],
+	'updater: a release with no assets offers nothing'
+);
+
+advtn_assert_same(
+	false,
+	ADVTN_Updater::package_in( array() )['is_asset'],
+	'updater: nothing found is not an asset'
+);
+
+// A decoy first: the loop must keep going rather than settle for what it hit.
+advtn_assert_same(
+	$advtn_good_url,
+	ADVTN_Updater::package_in(
+		array(
+			advtn_asset( 'readme.zip', $advtn_download . 'v1.3.0/readme.zip' ),
+			advtn_asset( 'trending-now-1.3.0.zip', $advtn_good_url ),
+		)
+	)['url'],
+	'updater: a decoy asset does not stop the search'
+);
+
+// With a token the asset goes through the API, because browser_download_url
+// redirects to signed storage that rejects an Authorization header. The URL is
+// built from a pinned prefix and an integer, so it is safe by construction.
+advtn_assert_same(
+	'https://api.github.com/repos/advision-development/trending-now-plugin/releases/assets/42',
+	ADVTN_Updater::package_in(
+		array( advtn_asset( 'trending-now-1.3.0.zip', $advtn_good_url, 42 ) ),
+		'ghp_token'
+	)['url'],
+	'updater: with a token the asset is fetched through the API'
+);
+
+// A hostile response could name an asset with no usable id. Falling through to
+// browser_download_url would send the site to storage that cannot serve a
+// private repository, which reads as the token being wrong.
+advtn_assert_same(
+	'',
+	ADVTN_Updater::package_in(
+		array( advtn_asset( 'trending-now-1.3.0.zip', $advtn_good_url, 0 ) ),
+		'ghp_token'
+	)['url'],
+	'updater: with a token an asset with no id is refused'
+);
+
+/* -------------------------------------------------------------------------
+ * ADVTN_Updater version comparison
+ * ---------------------------------------------------------------------- */
+
+advtn_assert_same( '1.2.0', ADVTN_Updater::normalize( '1.2' ), 'updater: a version is padded to three components' );
+advtn_assert_same( '', ADVTN_Updater::normalize( '1.2.0-beta' ), 'updater: a suffixed version is not a version' );
+
+// version_compare( '1.2', '1.2.0' ) reports less-than, so an unpadded
+// comparison against a two-component header clears a site that has an update
+// waiting.
+advtn_assert_same( false, ADVTN_Updater::is_newer( '1.2', '1.2.0' ), 'updater: 1.2 is not newer than 1.2.0' );
+advtn_assert_same( false, ADVTN_Updater::is_newer( '1.2.0', '1.2' ), 'updater: 1.2.0 is not newer than 1.2' );
+advtn_assert_same( true, ADVTN_Updater::is_newer( '1.3', '1.2.0' ), 'updater: 1.3 is newer than 1.2.0' );
+advtn_assert_same( true, ADVTN_Updater::is_newer( '0.10', '0.9' ), 'updater: 0.10 is newer than 0.9' );
+advtn_assert_same( false, ADVTN_Updater::is_newer( '1.2.0-rc1', '1.1.0' ), 'updater: a version this plugin does not publish is never newer' );
+advtn_assert_same( false, ADVTN_Updater::is_newer( '', '1.2.0' ), 'updater: an empty version is never newer' );
+
+advtn_assert_same( '1.3.0', ADVTN_Updater::version_of( 'v1.3.0' ), 'updater: a leading v is stripped' );
+advtn_assert_same( '1.3.0', ADVTN_Updater::version_of( '1.3.0' ), 'updater: a bare version tag is kept' );
+advtn_assert_same( '', ADVTN_Updater::version_of( 'main' ), 'updater: a tag naming a branch is not a version' );
+advtn_assert_same( '', ADVTN_Updater::version_of( 'v1.2.0-rc1' ), 'updater: a pre-release tag is not a version' );
+
+/* -------------------------------------------------------------------------
+ * ADVTN_Manual_Feed::identity()
+ *
+ * What a site says about itself on a feed fetch. Two query parameters and no
+ * new endpoint: the feed already fetches every few hours, and a feed that does
+ * not know these parameters serves exactly what it served before.
+ * ---------------------------------------------------------------------- */
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.example', 'v' => '1.2.0' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.example', '1.2.0' ),
+	'identity: sends the home URL and the version'
+);
+
+// A parameter present and empty is a claim that this site has no address.
+// Absent is the truthful "this plugin did not say", and the far end treats a
+// missing value as bookkeeping it simply does not do.
+advtn_assert_same(
+	array( 'v' => '1.2.0' ),
+	ADVTN_Manual_Feed::identity( '', '1.2.0' ),
+	'identity: omits an empty home rather than sending it blank'
+);
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.example' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.example', '' ),
+	'identity: omits an empty version'
+);
+
+advtn_assert_same(
+	array(),
+	ADVTN_Manual_Feed::identity( '', '' ),
+	'identity: says nothing when it has nothing to say'
+);
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.example', 'v' => '1.2.0' ),
+	ADVTN_Manual_Feed::identity( '  https://mysite.example  ', "\t1.2.0\n" ),
+	'identity: trims both'
+);
+
+// A subdirectory install sends its whole home. The far end keeps only the
+// origin, so the directory is lost there — recorded rather than worked around,
+// because measured across the network on 2026-09-01 no install is in one.
+advtn_assert_same(
+	array( 'site' => 'https://mysite.example/blog', 'v' => '1.2.0' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.example/blog', '1.2.0' ),
+	'identity: sends a subdirectory home unchanged'
+);
+
+// home_url() is the only source. There is deliberately no setting for this: a
+// typed field is a field filled in wrong, and the far end turns this value into
+// an address it will later contact.
+advtn_assert_same(
+	array( 'site' => rtrim( ADVTN_TEST_HOME, '/' ), 'v' => '9.9.9' ),
+	ADVTN_Manual_Feed::identity( rtrim( home_url(), '/' ), '9.9.9' ),
+	'identity: what home_url() gives is what is sent'
+);
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );

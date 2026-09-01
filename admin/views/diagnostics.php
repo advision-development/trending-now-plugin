@@ -101,24 +101,36 @@ $advtn_badge = static function ( bool $value ): string {
 			<th><?php esc_html_e( 'Latest release', 'trending-now' ); ?></th>
 			<td>
 				<?php
+				/*
+				 * Read from the cache, never fetched here. This used to call
+				 * latest_release(), so every render of this tab was another
+				 * request to the GitHub API — and GitHub allows 60 an hour per
+				 * IP, which a hosting provider's sites share.
+				 */
 				if ( ! $settings->get_bool( 'auto_update' ) ) {
 					esc_html_e( 'Update checks are disabled.', 'trending-now' );
 				} else {
-					$advtn_release = advtn()->updater()->latest_release();
+					$advtn_update = advtn()->updater()->status();
 
-					if ( is_wp_error( $advtn_release ) ) {
-						echo '<span class="advtn-badge advtn-badge--bad">' . esc_html__( 'unavailable', 'trending-now' ) . '</span> ';
-						echo esc_html( $advtn_release->get_error_message() );
-					} elseif ( version_compare( $advtn_release['version'], ADVTN_VERSION, '>' ) ) {
-						printf(
-							'<span class="advtn-badge advtn-badge--bad">%s</span> <a href="%s" target="_blank" rel="noopener">%s</a>',
-							esc_html__( 'update available', 'trending-now' ),
-							esc_url( $advtn_release['url'] ),
-							esc_html( $advtn_release['version'] )
-						);
-					} else {
-						echo '<span class="advtn-badge advtn-badge--ok">' . esc_html__( 'up to date', 'trending-now' ) . '</span> ';
-						echo esc_html( $advtn_release['version'] );
+					switch ( $advtn_update['state'] ) {
+						case 'available':
+							echo '<span class="advtn-badge advtn-badge--bad">' . esc_html__( 'update available', 'trending-now' ) . '</span> ';
+							echo esc_html( $advtn_update['version'] );
+							break;
+
+						case 'failed':
+							echo '<span class="advtn-badge advtn-badge--bad">' . esc_html__( 'unavailable', 'trending-now' ) . '</span> ';
+							echo esc_html( $advtn_update['reason'] );
+							break;
+
+						case 'never':
+							echo '<span class="advtn-badge">' . esc_html__( 'not checked yet', 'trending-now' ) . '</span>';
+							break;
+
+						default:
+							echo '<span class="advtn-badge advtn-badge--ok">' . esc_html__( 'up to date', 'trending-now' ) . '</span> ';
+							echo esc_html( $advtn_update['version'] );
+							break;
 					}
 				}
 				?>
