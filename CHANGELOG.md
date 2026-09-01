@@ -106,6 +106,12 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   no `vendor/`, so it installed a plugin whose Action Scheduler was absent and which
   degraded to WP-Cron silently. No recognised asset now means no update offered.
 
+- **The Updates setting said the opposite of what it does.** The label was rewritten to
+  "without being asked" when unattended updates landed and the description under it was left
+  saying WordPress still asks before installing — one cell answering the question two ways,
+  and the wrong answer was the reassuring one. It also described an auto-update toggle that
+  is no longer there.
+
 ### Notes for anybody debugging this later
 
 - **The asset name and the repository name are different strings**, and both are pinned.

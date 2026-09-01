@@ -328,7 +328,7 @@ $advtn_mode_attr = static function ( array $modes, string $mode ): string {
 			<th scope="row"><?php esc_html_e( 'Updates', 'trending-now' ); ?></th>
 			<td>
 				<label><input type="checkbox" name="advtn[auto_update]" value="1" <?php checked( ! empty( $advtn_s['auto_update'] ) ); ?> /> <?php esc_html_e( 'Keep this plugin updated from GitHub releases, without being asked', 'trending-now' ); ?></label>
-				<p class="description"><?php esc_html_e( 'Surfaces new releases on the Plugins screen like any other update. WordPress still asks before installing unless you enable its own auto-update toggle for this plugin.', 'trending-now' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Releases install themselves on the next WordPress update run. The Plugins screen prints the state of the last check rather than a toggle, because the toggle answered nothing. Unticking this switches off checking entirely, and a site that must refuse one release can filter advtn_auto_update from an mu-plugin.', 'trending-now' ); ?></p>
 			</td>
 		</tr>
 		<tr>
