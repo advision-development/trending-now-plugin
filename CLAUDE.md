@@ -192,6 +192,23 @@ know them serves what it always served, so this never needs a coordinated deploy
   parameters are the decision this plugin makes and are unit-tested; core's URL builder is
   core's job, and stubbing it would let a test pass against a stub that differs from it.
 
+**A push is a credential that can do one thing.** `POST /wp-json/advtn/v1/sync` calls
+`manual_feed()->fetch( true )` and nothing else, authenticated by `advtn_sync_key`
+in the `X-ADVTN-Sync-Key` header. Four rules:
+
+- **Not `ingest_secret`.** That one also authorizes `/ingest` and `/status`, so a
+  central store of them would trigger ingest across the network and read every site's
+  source configuration. A leaked sync key makes one site re-read its own feed.
+- **The key is generated here, on the first fetch, and never distributed.** The feed
+  learns it from the request. Rotating is this site changing it, and the previous value
+  stays valid so a deliberate replacement does not blind the feed for six hours.
+- **`expectedFeed` and `expectedVersion` are labels, never instructions.** Neither can
+  change what this site fetches — the URL is this site's own setting — and that is the
+  only reason they are safe to accept.
+- **The retry is scheduled, not slept through.** A 60-second sleep inside the request
+  exceeds a default nginx `fastcgi_read_timeout`, and the pusher reads that 504 as a
+  failed push and prunes a site that worked. One retry, queued, then the outcome stands.
+
 The token is optional: a public feed needs none, and the `Authorization` header is omitted
 entirely rather than sent empty. While subscribed, the admin's rows render disabled *and*
 `handle_save_manual` refuses outright — the first is a hint to a browser, the second is

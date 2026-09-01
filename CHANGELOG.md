@@ -5,6 +5,44 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] — 2026-09-01
+
+### Added
+
+- **A site can be told to fetch now.** `POST /wp-json/advtn/v1/sync` makes this site
+  re-read its curated feed immediately instead of waiting up to six hours. It calls the
+  same `fetch( true )` the *Fetch now* button does, down the same path, through the same
+  parser — the push carries no links, only the instruction to go and get them.
+
+  **It has its own credential**, `advtn_sync_key`, sent in the `X-ADVTN-Sync-Key` header
+  and verified in constant time. Deliberately not `ingest_secret`, which also authorizes
+  `/ingest` and `/status`: a central store of those would be able to trigger ingests
+  across the whole network and read every site's source configuration. What a leaked sync
+  key buys is one site re-reading the feed it re-reads every six hours anyway.
+
+  **Nothing is distributed.** This site invents the key the first time it fetches and
+  sends it on the request it was already making, so the feed learns it by being called.
+  Replacing it is a button on the settings screen; the old value keeps working until the
+  feed sees the new one, because otherwise replacing a key you suspected had leaked would
+  mean waiting six hours for it to take effect.
+
+- **The answer says which feed actually arrived**, read out of the payload rather than
+  echoed from the request. A site that has moved to a different feed can then be told
+  apart from one that refreshed, which an echoed value could never do.
+
+- **A fetch says why it happened.** `&trigger=sync` goes out with a pushed fetch, from a
+  closed list of names. It is a claim this site makes about itself and it is a label on a
+  log row, not an authorization.
+
+### Notes for anybody debugging this later
+
+- **The one retry is scheduled, not slept through.** When a pushed fetch arrives behind
+  the version the pusher expected — the serving cache on the other end is 60 seconds with
+  no invalidation available — this site queues one more fetch a minute out and answers
+  immediately. Sleeping inside the request would put the response past a default nginx
+  `fastcgi_read_timeout` of 60 seconds, and the pusher would read that `504` as a failed
+  push and drop this site from its list for being slow.
+
 ## [1.3.0] — 2026-09-01
 
 ### Security
