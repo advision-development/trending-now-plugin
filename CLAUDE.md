@@ -225,6 +225,40 @@ the removal keep their news classification.
   WordPress derives from the `Update URI` header. Removing that header hands the slug
   back to wordpress.org. The GitHub token is only ever sent to `api.github.com` — the
   release CDN redirect rejects it, and sending it further would leak it.
+- **`ADVTN_Updater` is the most dangerous class here.** Everything else reads or renders;
+  this one hands WordPress a URL and WordPress unzips it over the plugin directory and runs
+  it. Five rules, and none of them are decoration:
+  - **The package URL is pinned**, to
+    `https://github.com/advision-development/trending-now-plugin/releases/download/`, and
+    refused if it contains `..`. A prefix pins the host exactly — a URL's authority ends at
+    the first slash after the scheme — but *not* the repository, because HTTP clients
+    resolve dot segments before sending. Both checks are mutation-tested in `tests/run.php`.
+  - **`REPO` and `SLUG` are different strings and both are pinned.** `REPO` is the URL path,
+    `SLUG` is the plugin directory and the asset-name prefix, because `bin/release` publishes
+    `trending-now-<version>.zip` out of `trending-now-plugin`. The sibling scanner plugins
+    use one constant for both; copying that refuses every real release.
+  - **The token path is safe by construction and deliberately not prefix-checked.** It is
+    built from the pinned prefix and `(int) $asset['id']`. A guard no input can reach is a
+    guard no test can hold in place — the sibling removed exactly such a check and wrote
+    down why.
+  - **No zipball fallback.** That archive has no `vendor/`, so it installs a plugin whose
+    Action Scheduler is missing and which degrades to WP-Cron without saying so.
+  - **Failures are cached** for `FAILURE_TTL`, with their reason. GitHub allows 60
+    unauthenticated requests an hour per IP and a host's sites share one, so retrying on
+    every check is how one rate-limited site rate-limits the rest. Anything that renders
+    update state calls `status()`, never `latest_release()`.
+- **`check_for_update()` reports a known release even when it is not newer.**
+  `wp_update_plugins()` compares the versions and files the answer under `response` or
+  `no_update` itself, and WordPress reads `no_update` to decide whether a row offers
+  automatic updates — which is where `explain_auto_update()` prints the last check and the
+  re-check link. Answering `false` there loses the cell. It cannot downgrade: a release
+  behind the installed copy fails core's comparison.
+- **The plugin updates itself unattended**, via `auto_update_plugin`, and
+  `automatically()` must hand `$update` back untouched for every other plugin — returning
+  `true` there switches unattended updates on site-wide. `advtn_auto_update` is the escape
+  hatch and it is a filter rather than a checkbox because the checkbox would not work:
+  `automatically()` answers regardless of what it says, which is why
+  `plugin_auto_update_setting_html` replaces it with a sentence.
 - Curated links live in the `advtn_manual_links` option but are also written into the
   items table through `ADVTN_Source_Manual`, so they dedupe, archive and count like
   anything else. Expiry sets the row to `stale` rather than deleting it — leaving it
