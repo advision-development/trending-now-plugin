@@ -167,6 +167,17 @@ a feed. Four rules, and each cost something to learn:
 - **The commit goes through `ADVTN_Manual::save()`.** It already validates rows, forgets
   the ones that left, syncs the items table and reschedules expiry. A second write path
   would be a second definition of a valid link, and the two would drift.
+- **The feed request follows no redirects.** `redirection => 0`, and a 3xx is reported as a
+  configuration error naming the target host. It carries the shared feed token *and* this
+  site's sync key, and WP's HTTP transport re-sends the whole header set on every hop
+  including a cross-host one, where only the initial URL was ever checked by
+  `ADVTN_URL::is_valid()`. A lapsed hostname, a shortener or a reconfigured proxy would
+  hand a third party a token that reads every feed in the network. Stripping headers per
+  hop was rejected: it depends on `http_request_args` firing inside `WP_Http`, and a
+  credential control resting on core's redirect internals fails silently. The cost is that
+  a feed URL which legitimately redirects stops fetching until it is corrected — loudly,
+  with the stored links untouched. `ADVTN_Source_Base` keeps `redirection => 3`; those
+  requests carry no bearer credential in a header.
 - **A 401 does not mean the token is wrong.** The feed answers 401 for a gated feed *and*
   for one that does not exist, deliberately — distinguishing them would let anybody map
   the network's feed names by guessing slugs. It is the one refusal this plugin cannot

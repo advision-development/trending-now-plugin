@@ -270,6 +270,27 @@ final class ADVTN_Manual_Feed {
 	}
 
 	/**
+	 * Whether a status code is a redirect this plugin refuses to follow.
+	 *
+	 * 304 is deliberately excluded. It is in the 3xx range but it is not a
+	 * redirect: it is the feed saying the version already held is current, and
+	 * it is handled as a success. Treating it as a redirect would turn every
+	 * unmodified scheduled fetch into a reported configuration error.
+	 *
+	 * Pure and static so the range and that one exclusion are testable.
+	 *
+	 * @param int|null $code HTTP status code.
+	 * @return bool
+	 */
+	public static function is_redirect( ?int $code ): bool {
+		if ( null === $code || 304 === $code ) {
+			return false;
+		}
+
+		return $code >= 300 && $code <= 399;
+	}
+
+	/**
 	 * Stored fetch state.
 	 *
 	 * @return array<string,mixed>
@@ -452,6 +473,34 @@ final class ADVTN_Manual_Feed {
 			);
 		}
 
+		/*
+		 * A redirect is a configuration error, reported by name.
+		 *
+		 * `request()` sends `redirection => 0` so the credentials never follow
+		 * a hop — the reasoning is on that call. What arrives here is the raw
+		 * 3xx, and it needs its own message: the generic "The feed returned
+		 * HTTP 301" sends an operator to look at the feed when the thing to fix
+		 * is the URL in their own settings field. 304 is excluded because it is
+		 * in the 3xx range and is handled above as a success.
+		 *
+		 * Only the target's host goes into the message. It is the fact that
+		 * matters, and the full Location is a remote-controlled string that
+		 * would otherwise land in the log ring and on an admin page.
+		 */
+		if ( self::is_redirect( $response['code'] ) ) {
+			$target = ADVTN_URL::host( (string) $response['location'] );
+
+			return $this->fail(
+				'' === $target
+					/* translators: %d: HTTP status code. */
+					? sprintf( __( 'The feed URL answered HTTP %d, a redirect. Redirects are not followed, because the request carries this site\'s credentials and they must not be handed to whatever the redirect points at. Put the final URL in the field instead.', 'trending-now' ), (int) $response['code'] )
+					/* translators: 1: HTTP status code, 2: target hostname. */
+					: sprintf( __( 'The feed URL answered HTTP %1$d, redirecting to %2$s. Redirects are not followed, because the request carries this site\'s credentials and they must not be handed to whatever the redirect points at. Put the final URL in the field instead.', 'trending-now' ), (int) $response['code'], $target ),
+				$response['code'],
+				$response['ms']
+			);
+		}
+
 		if ( 200 !== $response['code'] ) {
 			/*
 			 * A 401 does not mean the token is wrong.
@@ -511,7 +560,7 @@ final class ADVTN_Manual_Feed {
 	 * `save()` on every commit — which retires the row and rebuilds there.
 	 *
 	 * @param array<string,mixed>                                                       $parsed   Parser result.
-	 * @param array{response:array|WP_Error,code:int|null,body:string,ms:int,etag:string} $response Transport result.
+	 * @param array{response:array|WP_Error,code:int|null,body:string,ms:int,etag:string,location:string} $response Transport result.
 	 * @return array{status:string,message:string,count:int,skipped:int,feed:string,version:string}
 	 */
 	private function commit( array $parsed, array $response ): array {
@@ -575,7 +624,7 @@ final class ADVTN_Manual_Feed {
 	 * @param string $url     Feed URL.
 	 * @param bool   $force   Ask unconditionally, ignoring the stored ETag.
 	 * @param string $trigger Why this fetch is happening, passed through to identity().
-	 * @return array{response:array|WP_Error,code:int|null,body:string,ms:int,etag:string}
+	 * @return array{response:array|WP_Error,code:int|null,body:string,ms:int,etag:string,location:string}
 	 */
 	private function request( string $url, bool $force = false, string $trigger = '' ): array {
 		$started = microtime( true );
@@ -610,11 +659,39 @@ final class ADVTN_Manual_Feed {
 			$headers['If-None-Match'] = $etag;
 		}
 
+		/*
+		 * NO REDIRECTS. This request carries two credentials, and WordPress's
+		 * HTTP transport re-sends the whole header set on every hop, including
+		 * a hop to a different host. Only the initial URL is checked by
+		 * `ADVTN_URL::is_valid()`, so with `redirection => 3` a feed URL that
+		 * answers 302 — a lapsed hostname somebody re-registered, a shortener,
+		 * an internal proxy someone reconfigured — hands a third party the
+		 * shared feed token, which reads every feed in the network, and this
+		 * site's sync key, which can force its fetch. The whole argument for
+		 * the sync key is that nothing has to be distributed; one redirect
+		 * distributes it.
+		 *
+		 * Zero rather than stripping the headers per hop. Dropping them on a
+		 * cross-host hop would preserve more behaviour, but it depends on
+		 * `http_request_args` firing for each redirect inside WP_Http, and a
+		 * credential control that rests on core's redirect internals is one
+		 * whose failure is silent and invisible from here. With no second
+		 * request the credentials cannot reach a second host, and that is true
+		 * by reading four lines rather than by assumption.
+		 *
+		 * WHAT IT COSTS. A site whose `manual_feed_url` legitimately redirects
+		 * stops fetching until the URL is corrected — most plausibly `http://`
+		 * typed against a host that redirects to `https://`. It fails loudly
+		 * rather than silently: the 3xx is reported by name below, `fail()`
+		 * leaves the stored links untouched, and the fix is one field. The
+		 * ingest sources keep `redirection => 3` (ADVTN_Source_Base) because
+		 * they carry no bearer credential in a header.
+		 */
 		$response = wp_remote_get(
 			$url,
 			array(
 				'timeout'     => $this->settings->get_int( 'http_timeout', 1, 60 ),
-				'redirection' => 3,
+				'redirection' => 0,
 				'user-agent'  => self::USER_AGENT,
 				'headers'     => $headers,
 			)
@@ -629,6 +706,7 @@ final class ADVTN_Manual_Feed {
 				'body'     => '',
 				'ms'       => $ms,
 				'etag'     => '',
+				'location' => '',
 			);
 		}
 
@@ -638,6 +716,7 @@ final class ADVTN_Manual_Feed {
 			'body'     => (string) wp_remote_retrieve_body( $response ),
 			'ms'       => $ms,
 			'etag'     => (string) wp_remote_retrieve_header( $response, 'etag' ),
+			'location' => (string) wp_remote_retrieve_header( $response, 'location' ),
 		);
 	}
 

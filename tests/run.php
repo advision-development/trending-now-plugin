@@ -1232,6 +1232,35 @@ advtn_assert_same(
 $GLOBALS['advtn_test_options'] = array();
 
 /* -------------------------------------------------------------------------
+ * A redirect on the feed request is refused, not followed
+ *
+ * The request carries the shared feed token and this site's sync key, and
+ * WordPress re-sends the whole header set on every hop including a cross-host
+ * one. `redirection => 0` is what stops that; this is the classification that
+ * turns the resulting 3xx into a message naming the real problem.
+ * ---------------------------------------------------------------------- */
+
+foreach ( array( 300, 301, 302, 303, 307, 308, 399 ) as $advtn_redirect_code ) {
+	advtn_assert_same( true, ADVTN_Manual_Feed::is_redirect( $advtn_redirect_code ), 'redirect: HTTP ' . $advtn_redirect_code . ' is a refused redirect' );
+}
+
+// 304 is in the 3xx range and is NOT a redirect: it is the feed saying the
+// version already held is current, and it is a success. Classifying it here
+// would turn every unmodified scheduled fetch into a reported configuration
+// error — on every subscribed site, four times a day.
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( 304 ), 'redirect: 304 is not a redirect, it is an unmodified feed' );
+
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( 200 ), 'redirect: 200 is not a redirect' );
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( 299 ), 'redirect: 299 is below the range' );
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( 400 ), 'redirect: 400 is above the range' );
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( 401 ), 'redirect: a gated feed is not a redirect' );
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( 500 ), 'redirect: a server error is not a redirect' );
+
+// A transport error leaves no code at all. It has its own failure path and must
+// not be reported as a redirect.
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( null ), 'redirect: no status code is not a redirect' );
+
+/* -------------------------------------------------------------------------
  * The log redacts every credential this plugin holds
  *
  * The scrub list is matched as substrings, and `sync_key` matched none of the
