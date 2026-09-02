@@ -376,6 +376,19 @@ final class ADVTN_Manual_Feed {
 	 * make the median-latency figures on the Feed subscription tab describe
 	 * somebody else's requests.
 	 *
+	 * A second remotely-triggerable read-modify-write of this option, and
+	 * unlike `write_state()` this one can be fired by anybody who reaches the
+	 * route, not only by this site's own fetch. It is the same non-atomic
+	 * shape `write_state()` already had, not a new class of problem: a
+	 * refusal landing between a fetch's read and its write can restore a
+	 * stale `etag`, `last_success_at` or `last_attempt_at`, costing one
+	 * redundant full 200 or one early due-check, or lose a refusal increment
+	 * — not corruption, and worth saying so plainly. Bounded by the rate
+	 * limit in `authorize_sync()`, 30 writes per 300 seconds per endpoint,
+	 * and not covered by the 352: `tests/run.php` never reaches options
+	 * concurrency. Closing it properly would mean an atomic option-update
+	 * path, which is its own change with its own review, not done here.
+	 *
 	 * @param bool $accepted Whether the presented key matched.
 	 * @return void
 	 */
