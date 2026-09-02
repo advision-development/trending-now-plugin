@@ -976,10 +976,31 @@ advtn_assert_same( false, ADVTN_Sync_Key::matches( '', $advtn_key_a, '' ), 'matc
 advtn_assert_same( false, ADVTN_Sync_Key::matches( $advtn_key_a, '', '' ), 'matches: nothing stored' );
 advtn_assert_same( false, ADVTN_Sync_Key::matches( $advtn_key_a, '', $advtn_key_a ), 'matches: a previous key with no current one is not accepted' );
 
-// A prefix is not a match. hash_equals() is what holds this, and a naive
-// substring or `==` comparison would also leak length by timing.
+// A prefix is not a match — but read what holds that. It is `is_wellformed()`'s
+// {64} quantifier, which returns before any comparison is reached, NOT
+// hash_equals(). The comment here used to credit hash_equals, and the plan
+// claimed a mutation test on it; both were wrong. `0 === strpos( $current,
+// $presented )` passes every assertion in this block, and so does `===`.
 advtn_assert_same( false, ADVTN_Sync_Key::matches( substr( $advtn_key_a, 0, 32 ), $advtn_key_a, '' ), 'matches: a prefix of the key' );
 advtn_assert_same( false, ADVTN_Sync_Key::matches( strtoupper( $advtn_key_a ), $advtn_key_a, '' ), 'matches: the key in a different case' );
+
+// The one candidate that does reach hash_equals: full length, well formed, and
+// differing only in the last character. It exercises the comparison rather than
+// the length guard. It does NOT hold the constant-time property — no assertion
+// can, which is why the docblock says that property is held by review.
+advtn_assert_same(
+	false,
+	ADVTN_Sync_Key::matches( substr( $advtn_key_a, 0, 63 ) . ( 'f' === substr( $advtn_key_a, -1 ) ? '0' : 'f' ), $advtn_key_a, '' ),
+	'matches: a full-length key differing in one character'
+);
+
+// The previous key is compared unconditionally. With no previous key stored
+// there is nothing to match, and `hash_equals( '', $presented )` says so
+// without a `&&` that would skip the call — the state of every site that has
+// never pressed Replace.
+advtn_assert_same( true, ADVTN_Sync_Key::matches( $advtn_key_a, $advtn_key_a, '' ), 'matches: the current key with no previous key stored' );
+advtn_assert_same( false, ADVTN_Sync_Key::matches( $advtn_key_b, $advtn_key_a, '' ), 'matches: an unrelated key with no previous key stored' );
+advtn_assert_same( false, ADVTN_Sync_Key::matches( $advtn_key_a, $advtn_key_b, 'not a key' ), 'matches: a malformed previous key is not a match' );
 
 /* -------------------------------------------------------------------------
  * The sync key survives a settings save
