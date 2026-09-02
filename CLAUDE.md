@@ -24,7 +24,10 @@ authoritative specification; read it before changing behaviour.
 
 ```bash
 composer install       # pulls woocommerce/action-scheduler into vendor/
-php tests/run.php      # dependency-free unit tests (URL normalization, HMAC)
+php tests/run.php      # 363 as of 2026-09-02. Dependency-free: URL normalization and
+                       # HMAC, plus the updater's pinning, the sync key, the trigger
+                       # fields and the served-list decision. Measure it rather than
+                       # trusting this number — it has been stale before.
 composer test          # same thing
 find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l   # lint
 ```
@@ -219,6 +222,38 @@ in the `X-ADVTN-Sync-Key` header. Four rules:
 - **The retry is scheduled, not slept through.** A 60-second sleep inside the request
   exceeds a default nginx `fastcgi_read_timeout`, and the pusher reads that 504 as a
   failed push and prunes a site that worked. One retry, queued, then the outcome stands.
+
+**Every caller of `fetch()` names itself, and three of them did not.** `TRIGGERS` is closed
+— `sync`, `cron`, `manual`, `rest` — and a name outside it is dropped rather than corrected,
+because the value lands in a log column on the far end and a token this side cannot name is a
+value nobody chose. `cron` is the reason the list exists: with only `sync` and `manual` in it,
+an absent trigger meant the timer, a signed request, or a plugin too old to say, and those are
+different answers to the one question somebody debugging a link that never appeared is asking.
+`wp trending-now feed-fetch` is the fifth caller and stays silent on purpose — the vocabulary
+is mirrored in three places that cannot import each other, so a fifth token invented on one
+side is one the other two drop, and `manual` would be a lie. The CLI reads "not recorded",
+which is true.
+
+**Three stored fields, and the third is the one the screen needs.** `last_trigger` is what
+asked for the last attempt. `last_success_trigger` is what asked for the last fetch that
+committed. `last_change_at` is when the list actually moved. The first two are not two halves
+of one fact: a forced fetch sends no ETag, so no push and no *Fetch now* can receive a 304,
+which makes "committed an identical list" the **ordinary** case on the pushed path rather than
+an edge. So the panel asks `last_change_at === last_attempt_at` — did *this* fetch move the
+list — and never compares the two triggers, which was the first version and went silent
+exactly when both were `sync`. A push that changed nothing then read as a push that worked.
+
+**One clock reading dates all three.** `commit()` holds no clock local and passes the reading
+into `commit_patch()` as an argument, so two `gmdate()` calls cannot straddle a second
+boundary and make the panel say "this fetch changed nothing" about the fetch that moved
+somebody's link. The assertion holding it compares the fields against an **injected** clock,
+not against each other — comparing them to each other passes on almost every run, which is an
+assertion that cannot fail.
+
+**An absent trigger is never rendered as a cause.** `''` means the plugin did not say, and on
+a six-hour timer every row from before this shipped says that. `trigger_words()` answers "not
+recorded" and the view drops the cause clause rather than naming one — a fabricated cause
+welded to a real timestamp is worse than a date standing alone.
 
 The token is optional: a public feed needs none, and the `Authorization` header is omitted
 entirely rather than sent empty. While subscribed, the admin's rows render disabled *and*
