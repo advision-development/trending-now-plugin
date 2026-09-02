@@ -26,6 +26,13 @@ $advtn_feed_next    = $advtn_feed->next_due();
 $advtn_feed_ring    = isset( $advtn_feed_state['attempts'] ) && is_array( $advtn_feed_state['attempts'] ) ? $advtn_feed_state['attempts'] : array();
 $advtn_feed_summary = ADVTN_Attempts::summary( $advtn_feed_ring );
 
+// What asked for the last attempt, and what asked for the last fetch that
+// actually moved the list. Both may be '' — every fetch made before the plugin
+// learned to say so carries nothing, and `trigger_words()` renders that as "not
+// recorded" rather than inventing a cause for it.
+$advtn_feed_trigger = (string) ( $advtn_feed_state['last_trigger'] ?? '' );
+$advtn_feed_moved   = (string) ( $advtn_feed_state['last_success_trigger'] ?? '' );
+
 /**
  * Render one curated link row.
  *
@@ -277,6 +284,38 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 				<strong><?php echo esc_html( (string) ( $advtn_feed_state['last_attempt_at'] ?? '—' ) ); ?></strong>
 				<?php if ( isset( $advtn_feed_state['http_code'] ) && null !== $advtn_feed_state['http_code'] ) : ?>
 					<span class="advtn-badge"><?php echo esc_html( 'HTTP ' . (int) $advtn_feed_state['http_code'] ); ?></span>
+				<?php endif; ?>
+			</li>
+			<li class="description">
+				<?php
+				printf(
+					/* translators: 1: what asked for the last attempt. */
+					esc_html__( 'Asked for by: %1$s.', 'trending-now' ),
+					esc_html( ADVTN_Manual_Feed::trigger_words( $advtn_feed_trigger ) )
+				);
+				?>
+				<?php
+				/*
+				 * The second sentence only when the two differ.
+				 *
+				 * A line identical on every load is width, not information, and
+				 * this repo has removed three columns after somebody had to ask
+				 * what their headers meant. On a healthy site the timer does both,
+				 * the two values match, and one sentence says everything; the
+				 * second appears exactly when the last attempt and the last actual
+				 * change came from different places, which is the case worth
+				 * reading. It is withheld while `last_success_trigger` is empty for
+				 * the same reason: "not recorded" twice is not a comparison.
+				 */
+				?>
+				<?php if ( '' !== $advtn_feed_moved && $advtn_feed_moved !== $advtn_feed_trigger ) : ?>
+					<?php
+					printf(
+						/* translators: 1: what asked for the last fetch that changed the list. */
+						esc_html__( 'The list last changed from %1$s.', 'trending-now' ),
+						esc_html( ADVTN_Manual_Feed::trigger_words( $advtn_feed_moved ) )
+					);
+					?>
 				<?php endif; ?>
 			</li>
 			<li>
