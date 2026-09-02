@@ -248,6 +248,7 @@ final class ADVTN_REST {
 		$result = advtn()->manual_feed()->fetch( true, 'sync' );
 
 		$retry_queued = false;
+		$retry_at     = 0;
 
 		if ( ADVTN_Manual_Feed::retry_needed(
 			(string) $result['feed'],
@@ -255,14 +256,41 @@ final class ADVTN_REST {
 			(string) $result['version'],
 			(string) $request->get_param( 'expectedVersion' )
 		) ) {
+			/*
+			 * Through ADVTN_Scheduler, not `wp_schedule_single_event()`.
+			 *
+			 * Every other deferred unit of work in this plugin goes through it,
+			 * and it prefers Action Scheduler, which is what puts the pending
+			 * retry in `pending_summary()` — the Diagnostics queue panel and
+			 * `status_payload()['pending_queue']`. An operator asking "the push
+			 * said stale, did the retry run?" had nowhere to look before.
+			 *
+			 * The pending check has to go through the same class for the same
+			 * reason. Where Action Scheduler is available `schedule_single()`
+			 * queues there and WP-Cron knows nothing about it, so the old bare
+			 * `wp_next_scheduled()` guard would answer "nothing pending" on
+			 * every push and queue without limit — the opposite of the property
+			 * it was written to hold.
+			 */
+			$scheduler = advtn()->scheduler();
+			$retry_at  = $scheduler->next_scheduled( ADVTN_Manual_Feed::HOOK_RETRY );
+
 			// Exactly one, and only if nothing is already queued. A retry that
 			// retried would turn a version that never moves into a site that
 			// never stops fetching.
-			if ( false === wp_next_scheduled( ADVTN_Manual_Feed::HOOK_RETRY ) ) {
-				wp_schedule_single_event( time() + self::SYNC_RETRY_DELAY, ADVTN_Manual_Feed::HOOK_RETRY );
+			if ( 0 === $retry_at ) {
+				$scheduler->schedule_single( time() + self::SYNC_RETRY_DELAY, ADVTN_Manual_Feed::HOOK_RETRY );
+				$retry_at = $scheduler->next_scheduled( ADVTN_Manual_Feed::HOOK_RETRY );
 			}
 
-			$retry_queued  = true;
+			// Reported, not assumed. This used to be a flat `true` set outside
+			// the guard, so the answer was identical whether a retry had just
+			// been queued, was queued and will run, was queued and never will,
+			// or had failed to queue at all. `retry_at` tells those apart: a
+			// timestamp in the past is a retry that is overdue, which is what a
+			// host with a blocked loopback looks like, and a stale site that
+			// promises a repair forever was how that state stayed invisible.
+			$retry_queued     = $retry_at > 0;
 			$result['status'] = 'stale';
 		}
 
@@ -274,6 +302,7 @@ final class ADVTN_REST {
 				'count'        => $result['count'],
 				'skipped'      => $result['skipped'],
 				'retry_queued' => $retry_queued,
+				'retry_at'     => $retry_at,
 			),
 			'failed' === $result['status'] ? 502 : 200
 		);
