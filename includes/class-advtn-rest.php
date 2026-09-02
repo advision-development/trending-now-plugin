@@ -81,7 +81,7 @@ final class ADVTN_REST {
 					'source' => array(
 						'type'              => 'string',
 						'required'          => false,
-						'sanitize_callback' => static fn( $v ) => preg_replace( '/[^a-z0-9_]/', '', (string) $v ),
+						'sanitize_callback' => static fn( $v ) => (string) preg_replace( '/[^a-z0-9_]/', '', (string) $v ),
 					),
 				),
 			)
