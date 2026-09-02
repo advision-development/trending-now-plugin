@@ -1495,6 +1495,103 @@ advtn_assert_same( 'a signed request to this site', ADVTN_Manual_Feed::trigger_w
 advtn_assert_same( 'not recorded', ADVTN_Manual_Feed::trigger_words( '' ), 'words: absent says it did not say' );
 advtn_assert_same( 'not recorded', ADVTN_Manual_Feed::trigger_words( 'whatever' ), 'words: an unknown token is not invented into a cause' );
 
+/* -------------------------------------------------------------------------
+ * Whether a fetch moved the list, and what caused the fetch that did
+ *
+ * These are the two gates the trigger fields rest on, and until now nothing
+ * held either: both mutations below passed 352 of 352. `commit()` needs $wpdb,
+ * WordPress and HTTP, so the decision was extracted onto `trigger_fields()` —
+ * the same move `ADVTN_Manual::served_list_changed()` made for the exposure-
+ * floor Critical, and for the same reason. The decision is the part that can be
+ * wrong, so the decision is what is asserted on.
+ * ---------------------------------------------------------------------- */
+
+$advtn_changed_at = '2026-09-02 10:04:17';
+
+/*
+ * GATE ONE: only a fetch that moved the list records a change.
+ *
+ * Mutating this — hoisting `last_success_trigger` and `last_change_at` out of
+ * the `if ( $changed )` — is the likeliest future regression, because a reader
+ * tidying `commit()` sees a conditional array and flattens it. It would put
+ * "the list last changed from a push, just now" on screen for the push that
+ * re-delivered the same list that was missing the operator's link.
+ */
+advtn_assert_same(
+	array( 'last_trigger' => 'cron' ),
+	ADVTN_Manual_Feed::trigger_fields( false, 'cron', $advtn_changed_at ),
+	'trigger fields: an unchanged fetch records the attempt and no change'
+);
+
+advtn_assert_same(
+	false,
+	array_key_exists( 'last_change_at', ADVTN_Manual_Feed::trigger_fields( false, 'sync', $advtn_changed_at ) ),
+	'trigger fields: an unchanged fetch keeps no change time even when handed one'
+);
+
+advtn_assert_same(
+	array(
+		'last_trigger'         => 'sync',
+		'last_success_trigger' => 'sync',
+		'last_change_at'       => $advtn_changed_at,
+	),
+	ADVTN_Manual_Feed::trigger_fields( true, 'sync', $advtn_changed_at ),
+	'trigger fields: a fetch that moved the list records the cause and dates it'
+);
+
+// The screen asks "did *this* fetch move the list", and answers it by comparing
+// `last_change_at` with `last_attempt_at`. That only works while the change time
+// is the attempt's own reading, handed in rather than read again in here.
+advtn_assert_same(
+	$advtn_changed_at,
+	ADVTN_Manual_Feed::trigger_fields( true, 'cron', $advtn_changed_at )['last_change_at'],
+	'trigger fields: the change is dated by the attempt it belongs to'
+);
+
+/*
+ * GATE TWO: the stored trigger is filtered, not trusted.
+ *
+ * This used to sit in `fetch()`, one line no test in this repository could
+ * reach; deleting it left the wire filtered and the store holding whatever a
+ * caller passed. It is now on the boundary that stores the value.
+ */
+advtn_assert_same(
+	array(
+		'last_trigger'         => '',
+		'last_success_trigger' => '',
+		'last_change_at'       => $advtn_changed_at,
+	),
+	ADVTN_Manual_Feed::trigger_fields( true, 'cronjob', $advtn_changed_at ),
+	'trigger fields: a near-miss trigger is dropped from the state, not corrected'
+);
+
+advtn_assert_same(
+	array( 'last_trigger' => 'manual' ),
+	ADVTN_Manual_Feed::trigger_fields( false, ' manual ', '' ),
+	'trigger fields: a padded trigger is trimmed before it is stored'
+);
+
+/*
+ * A caller that says nothing overwrites the stored cause.
+ *
+ * Decided rather than inherited. The feed side's roster row has the opposite
+ * rule — an empty value never overwrites a stored one — because there the field
+ * is a property of a site across many fetches and an empty value is an old
+ * plugin that cannot say. Here `last_success_trigger` and `last_change_at` are
+ * one event's cause and date. Keeping `cron` when a silent
+ * `wp trending-now feed-fetch` moved the list would print a fabricated cause
+ * beside a real timestamp; '' prints as withheld.
+ */
+advtn_assert_same(
+	array(
+		'last_trigger'         => '',
+		'last_success_trigger' => '',
+		'last_change_at'       => $advtn_changed_at,
+	),
+	ADVTN_Manual_Feed::trigger_fields( true, '', $advtn_changed_at ),
+	'trigger fields: a silent caller overwrites the stored cause rather than leaving a stale one'
+);
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );

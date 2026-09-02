@@ -162,6 +162,75 @@ final class ADVTN_Manual_Feed {
 	}
 
 	/**
+	 * The trigger and change fields a state patch carries.
+	 *
+	 * THREE FIELDS, BECAUSE THEY ANSWER THREE DIFFERENT QUESTIONS.
+	 *
+	 * `last_trigger` is what asked for the most recent attempt.
+	 * `last_success_trigger` is what asked for the most recent fetch that
+	 * actually moved this site's list. `last_change_at` is when that fetch
+	 * happened — the only clock in the state that dates a real change, because
+	 * `last_success_at` advances on every commit, unchanged ones included, and
+	 * so dates the last commit rather than the last change. A screen that
+	 * printed `last_success_at` beside "the list last changed from …" would
+	 * date the sentence wrongly and confidently.
+	 *
+	 * The gate is `$changed`, not "we reached commit()". Forced fetches — every
+	 * push and every *Fetch now* — send no ETag, so an unchanged feed cannot
+	 * answer 304 to them: the identical-commit case *is* the ordinary case on
+	 * the pushed path. Advancing these two there would tell an operator the list
+	 * last changed from a push, on precisely the fetch where the push
+	 * re-delivered the same list that was missing their link.
+	 *
+	 * `$now` is ignored unless the list moved. It is a parameter rather than a
+	 * `gmdate()` call inside here because the caller has to hand the same
+	 * reading to `last_attempt_at`: the screen's question "did *this* fetch move
+	 * the list" is answered by `last_change_at === last_attempt_at`, and two
+	 * separate `gmdate()` calls can straddle a second boundary and make a fetch
+	 * that did move the list report that it did not.
+	 *
+	 * A caller that said nothing overwrites a stored `last_success_trigger` with
+	 * '' rather than leaving the old value standing, and that is a decision
+	 * rather than an oversight. The pair is one event's cause and date; they
+	 * move together or the date dates the wrong cause. Keeping `cron` when a
+	 * silent `wp trending-now feed-fetch` moved the list would put a fabricated
+	 * cause next to a real timestamp — "the list last changed on 06:10, from the
+	 * six-hourly timer", when at 06:10 it was a person at a shell. The roster
+	 * row on the feed side has the opposite rule, where an empty value never
+	 * overwrites a stored one; that reasoning does not transfer, because over
+	 * there the field is a property of a *site* across many fetches and the
+	 * silence is an old plugin's missing capability, while here it is an
+	 * attribute of one event and the silence is the truth about that event.
+	 * `trigger_words()` renders it as withheld, never as a guess.
+	 *
+	 * Pure and static so the two gates are assertable without WordPress and
+	 * without HTTP — the same reason `ADVTN_Manual::served_list_changed()` was
+	 * extracted. The decision is the part that can be wrong, so the decision is
+	 * what is asserted on.
+	 *
+	 * @param bool   $changed Whether the fetch moved this site's served list.
+	 * @param string $trigger Raw trigger from a caller.
+	 * @param string $now     UTC datetime of this attempt, `Y-m-d H:i:s`. Used
+	 *                        only when the list moved.
+	 * @return array<string,string>
+	 */
+	public static function trigger_fields( bool $changed, string $trigger, string $now ): array {
+		// Filtered here, at the boundary that stores it, rather than trusted
+		// from a caller: a token this side cannot name is a value nobody chose,
+		// and a stored token no screen can read is worse than a stored ''.
+		$trigger = self::known_trigger( $trigger );
+
+		$fields = array( 'last_trigger' => $trigger );
+
+		if ( $changed ) {
+			$fields['last_success_trigger'] = $trigger;
+			$fields['last_change_at']       = $now;
+		}
+
+		return $fields;
+	}
+
+	/**
 	 * What this site says about itself on a feed fetch.
 	 *
 	 * Two query parameters, and they are the whole of the plugin's half of the
@@ -484,20 +553,27 @@ final class ADVTN_Manual_Feed {
 	/**
 	 * Fetch the feed and, if it answered properly, make it this site's list.
 	 *
+	 * `$trigger` is not filtered here. It travels raw through this method and
+	 * each of the two consumers filters at its own boundary, through the one
+	 * `known_trigger()`: `identity()` for the wire, `trigger_fields()` for the
+	 * stored state. Two call sites of one definition cannot disagree, which is
+	 * what that definition was extracted for. It was filtered once here
+	 * instead, which reads safer than it was — the store's guard then sat on a
+	 * line no test in this repository could reach, so deleting it broke nothing
+	 * and passed 352 of 352. A guard no input can reach is a guard nothing
+	 * holds in place. A third consumer of `$trigger` added to this method has
+	 * to filter for itself.
+	 *
 	 * @param bool   $force   Skip the due-check and the stored ETag. Never skips
 	 *                        the validity check: a forced fetch still has to be
 	 *                        answered by something shaped like a feed before
 	 *                        anything is kept.
 	 * @param string $trigger Why this fetch is happening. Passed through to
-	 *                        identity() so the request log can say why.
+	 *                        identity() so the request log can say why, and to
+	 *                        trigger_fields() so the stored state can.
 	 * @return array{status:string,message:string,count:int,skipped:int,feed:string,version:string}
 	 */
 	public function fetch( bool $force = false, string $trigger = '' ): array {
-		// Filtered once, here, so the value sent and the value stored cannot
-		// disagree — and so a caller nobody has taught to name itself stores
-		// '' ("did not say") rather than a token no screen can read.
-		$trigger = self::known_trigger( $trigger );
-
 		if ( ! $this->settings->feed_is_active() ) {
 			return $this->outcome( 'subscribed_off', __( 'This site is not subscribed to a feed.', 'trending-now' ) );
 		}
@@ -523,11 +599,17 @@ final class ADVTN_Manual_Feed {
 		// due from here.
 		if ( 304 === $response['code'] ) {
 			$this->write_state(
-				array(
-					'last_attempt_at' => gmdate( 'Y-m-d H:i:s' ),
-					'last_trigger'    => $trigger,
-					'http_code'       => 304,
-					'error'           => '',
+				array_merge(
+					array(
+						'last_attempt_at' => gmdate( 'Y-m-d H:i:s' ),
+						'http_code'       => 304,
+						'error'           => '',
+					),
+					// `changed` is false and there is no change time to record:
+					// a 304 is the feed saying the version already held is
+					// current, so `last_success_trigger` and `last_change_at`
+					// keep whatever earlier fetch actually moved the list.
+					self::trigger_fields( false, $trigger, '' )
 				),
 				true,
 				$response['ms'],
@@ -664,49 +746,40 @@ final class ADVTN_Manual_Feed {
 		$skipped = (int) $parsed['skipped'] + count( $result['errors'] );
 
 		/*
-		 * TWO TRIGGER FIELDS, BECAUSE THEY ANSWER DIFFERENT QUESTIONS.
+		 * ONE CLOCK READING, THREE FIELDS THAT ARE NOT HALVES OF ONE FACT.
 		 *
-		 * `last_trigger` is what asked for the most recent attempt.
-		 * `last_success_trigger` is what asked for the most recent fetch that
-		 * actually moved this site's list, and it is the one that matters:
-		 * "the last attempt was a push" does not say whether the push changed
-		 * anything, while "the last time this list moved, it was a push" is
-		 * what somebody debugging a link that did not propagate is asking.
+		 * `last_success_at` means "the last commit" and advances here on every
+		 * commit, the ones that stored a list identical to the one already held
+		 * included. `last_change_at` means "the last time the list moved" and is
+		 * written by `trigger_fields()` only when it did. `last_trigger` and
+		 * `last_success_trigger` are the causes of those two different events.
+		 * The reasoning for the gate, and for what a silent caller does to
+		 * `last_success_trigger`, is on `trigger_fields()`.
 		 *
-		 * A 304 advances the first and not the second — nothing was committed.
-		 * So does a commit that stored a list identical to the one already
-		 * held: the feed served the same links, `changed` is false, and no
-		 * rebuild happened. Gating on `changed` rather than on "we reached
-		 * commit()" is deliberate. Forced fetches — every push and every
-		 * *Fetch now* — send no ETag, so an unchanged feed cannot answer 304 to
-		 * them; the identical-commit case *is* the ordinary case on the pushed
-		 * path. Advancing the field there would tell an operator the list last
-		 * changed from a push, on precisely the fetch where the push delivered
-		 * the same list that was missing their link. The distinction would also
-		 * rest on whether the feed happens to send an ETag, which is not a fact
-		 * about this site's list.
-		 *
-		 * The consequence, recorded rather than hidden: `last_success_at`
-		 * advances on every commit and `last_success_trigger` does not, so they
-		 * are not two halves of one fact. The screen wording says which is
-		 * which — "the list last changed from …", never "last success".
+		 * `$now` is read once and handed to both `last_attempt_at` and (through
+		 * `trigger_fields()`) `last_change_at`, because their string equality is
+		 * the predicate the Feed subscription panel reads as "this fetch moved
+		 * the list". Two `gmdate()` calls a microsecond apart can straddle a
+		 * second boundary, and the panel would then tell an operator that a
+		 * fetch which did move the list changed nothing. They also have to land
+		 * in one option write, which the single `$patch` guarantees.
 		 */
-		$patch = array(
-			'last_attempt_at' => gmdate( 'Y-m-d H:i:s' ),
-			'last_success_at' => gmdate( 'Y-m-d H:i:s' ),
-			'last_trigger'    => $trigger,
-			'http_code'       => (int) $response['code'],
-			'error'           => '',
-			'item_count'      => $stored,
-			'skipped'         => $skipped,
-			'feed'            => (string) $parsed['slug'],
-			'version'         => (string) $parsed['version'],
-			'etag'            => (string) $response['etag'],
-		);
+		$now = gmdate( 'Y-m-d H:i:s' );
 
-		if ( $changed ) {
-			$patch['last_success_trigger'] = $trigger;
-		}
+		$patch = array_merge(
+			array(
+				'last_attempt_at' => $now,
+				'last_success_at' => $now,
+				'http_code'       => (int) $response['code'],
+				'error'           => '',
+				'item_count'      => $stored,
+				'skipped'         => $skipped,
+				'feed'            => (string) $parsed['slug'],
+				'version'         => (string) $parsed['version'],
+				'etag'            => (string) $response['etag'],
+			),
+			self::trigger_fields( $changed, $trigger, $now )
+		);
 
 		$this->write_state(
 			$patch,
@@ -858,13 +931,16 @@ final class ADVTN_Manual_Feed {
 		// `last_trigger` moves on a failure too: "the timer tried and the feed
 		// refused it" and "a push tried and the feed refused it" are different
 		// situations, and the failed attempt is the row somebody is looking at.
-		// `last_success_trigger` is untouched — nothing was committed.
+		// `changed` is false, so `last_success_trigger` and `last_change_at`
+		// are untouched — nothing was committed and the list did not move.
 		$this->write_state(
-			array(
-				'last_attempt_at' => gmdate( 'Y-m-d H:i:s' ),
-				'last_trigger'    => $trigger,
-				'http_code'       => $code,
-				'error'           => $message,
+			array_merge(
+				array(
+					'last_attempt_at' => gmdate( 'Y-m-d H:i:s' ),
+					'http_code'       => $code,
+					'error'           => $message,
+				),
+				self::trigger_fields( false, $trigger, '' )
 			),
 			false,
 			$ms,

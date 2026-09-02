@@ -33,6 +33,46 @@ $advtn_feed_summary = ADVTN_Attempts::summary( $advtn_feed_ring );
 $advtn_feed_trigger = (string) ( $advtn_feed_state['last_trigger'] ?? '' );
 $advtn_feed_moved   = (string) ( $advtn_feed_state['last_success_trigger'] ?? '' );
 
+/*
+ * DID *THIS* FETCH MOVE THE LIST?
+ *
+ * That is the question the panel is asked, and it is not "did the cause of the
+ * last attempt differ from the cause of the last change". Those are two
+ * sources, not two events, and comparing them goes silent exactly when both are
+ * `sync` — which on a pushed site is nearly every fetch. A push that
+ * re-delivered an identical list then showed a fresh timestamp, `HTTP 200` and
+ * "a push from the feed", with nothing anywhere saying the list had not moved,
+ * and the operator concluded the push had worked.
+ *
+ * `last_change_at` and `last_attempt_at` are written from one `gmdate()`
+ * reading in one option write when a fetch moves the list, so their equality is
+ * exactly "the attempt on screen above is the one that moved it". A 304, a
+ * failure and an identical commit all leave `last_change_at` behind.
+ *
+ * An empty `last_change_at` is withheld, not reported as "changed nothing".
+ * State written before this field existed has no change time, and on those
+ * rows the plugin genuinely does not know whether the last fetch moved
+ * anything — absent is not a value and must not render as one.
+ */
+$advtn_feed_changed_at   = (string) ( $advtn_feed_state['last_change_at'] ?? '' );
+$advtn_feed_change_known = '' !== $advtn_feed_changed_at;
+$advtn_feed_moved_now    = $advtn_feed_change_known
+	&& $advtn_feed_changed_at === (string) ( $advtn_feed_state['last_attempt_at'] ?? '' );
+
+/*
+ * Whether the stored cause has words of its own.
+ *
+ * `'' !== $advtn_feed_moved` would admit any non-empty string, including one
+ * outside the closed vocabulary, and print "the list last changed from not
+ * recorded" — a sentence that asserts a cause in the same breath as admitting
+ * it has none. No current writer can store such a value; a host mu-plugin
+ * filtering the option, or a half-applied upgrade, could. `known_trigger()` is
+ * private, so the membership test available to a view is whether the value
+ * renders as anything other than the absent case.
+ */
+$advtn_feed_moved_named = ADVTN_Manual_Feed::trigger_words( $advtn_feed_moved )
+	!== ADVTN_Manual_Feed::trigger_words( '' );
+
 /**
  * Render one curated link row.
  *
@@ -302,28 +342,31 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 					esc_html( ADVTN_Manual_Feed::trigger_words( $advtn_feed_trigger ) )
 				);
 				?>
-				<?php
-				/*
-				 * The second sentence only when the two differ.
-				 *
-				 * A line identical on every load is width, not information, and
-				 * this repo has removed three columns after somebody had to ask
-				 * what their headers meant. On a healthy site the timer does both,
-				 * the two values match, and one sentence says everything; the
-				 * second appears exactly when the last attempt and the last actual
-				 * change came from different places, which is the case worth
-				 * reading. It is withheld while `last_success_trigger` is empty for
-				 * the same reason: "not recorded" twice is not a comparison.
-				 */
-				?>
-				<?php if ( '' !== $advtn_feed_moved && $advtn_feed_moved !== $advtn_feed_trigger ) : ?>
-					<?php
-					printf(
-						/* translators: 1: what asked for the last fetch that changed the list. */
-						esc_html__( 'The list last changed from %1$s.', 'trending-now' ),
-						esc_html( ADVTN_Manual_Feed::trigger_words( $advtn_feed_moved ) )
-					);
-					?>
+				<?php if ( $advtn_feed_change_known ) : ?>
+					<?php if ( $advtn_feed_moved_now ) : ?>
+						<?php esc_html_e( 'This fetch changed the list.', 'trending-now' ); ?>
+					<?php elseif ( $advtn_feed_moved_named ) : ?>
+						<?php
+						printf(
+							/* translators: 1: UTC datetime. 2: what asked for the fetch that changed the list. */
+							esc_html__( 'This fetch changed nothing. The list last changed on %1$s UTC, from %2$s.', 'trending-now' ),
+							esc_html( $advtn_feed_changed_at ),
+							esc_html( ADVTN_Manual_Feed::trigger_words( $advtn_feed_moved ) )
+						);
+						?>
+					<?php else : ?>
+						<?php
+						// Dated, but by a caller that did not name itself —
+						// `wp trending-now feed-fetch` is the one that does
+						// this. The date is a fact; the cause is not, so the
+						// clause naming one is dropped rather than filled in.
+						printf(
+							/* translators: 1: UTC datetime. */
+							esc_html__( 'This fetch changed nothing. The list last changed on %1$s UTC.', 'trending-now' ),
+							esc_html( $advtn_feed_changed_at )
+						);
+						?>
+					<?php endif; ?>
 				<?php endif; ?>
 			</li>
 			<li>
