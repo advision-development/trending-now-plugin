@@ -411,16 +411,26 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 				</li>
 			<?php endif; ?>
 			<?php if ( $advtn_feed_summary['count'] > 0 ) : ?>
-				<li class="description">
+				<li>
 					<?php
-					printf(
-						/* translators: 1: attempt count, 2: median ms, 3: max ms. */
-						esc_html__( '%1$d recent attempts, median %2$dms, max %3$dms', 'trending-now' ),
-						(int) $advtn_feed_summary['count'],
-						(int) $advtn_feed_summary['p50'],
-						(int) $advtn_feed_summary['max']
-					);
+					// `li.description` styles nothing — see the `<span>` above,
+					// where the same class was inert for the same reason. This
+					// row was equally loud before that fix and equally wrong;
+					// it only became visible when the sentences above it started
+					// rendering as the secondary text they are, leaving the
+					// quieter fact of the two as the louder line on screen.
 					?>
+					<span class="description">
+						<?php
+						printf(
+							/* translators: 1: attempt count, 2: median ms, 3: max ms. */
+							esc_html__( '%1$d recent attempts, median %2$dms, max %3$dms', 'trending-now' ),
+							(int) $advtn_feed_summary['count'],
+							(int) $advtn_feed_summary['p50'],
+							(int) $advtn_feed_summary['max']
+						);
+						?>
+					</span>
 				</li>
 			<?php endif; ?>
 		</ul>
