@@ -619,6 +619,19 @@ final class ADVTN_Manual_Feed {
 	 * has its own scheduled event — `ADVTN_Manual::on_expiry()`, rescheduled by
 	 * `save()` on every commit — which retires the row and rebuilds there.
 	 *
+	 * That event is WP-Cron, and WP-Cron is exactly what a host with a blocked
+	 * loopback does not run — the reason `/sync` exists at all. On that class
+	 * of host, `on_expiry()` never fires: `retire_expired()` still marks the
+	 * row `stale`, but `ADVTN_Repository::get_by_ids()` does not filter on
+	 * status, so a `stale` id left in `advtn_current_selection` keeps
+	 * rendering until something else rebuilds — and an unchanged push is
+	 * precisely the fetch that will not, by design, above. This is accepted:
+	 * reintroducing a rebuild on every unchanged push is the exposure-floor
+	 * bug coming back, and it is worse than a stale link surviving on a
+	 * cron-dead host. Closing it without that would need a status filter in
+	 * `get_by_ids()`, or the feed omitting rows past their own `expires_at`,
+	 * neither of which is done here.
+	 *
 	 * @param array<string,mixed>                                                       $parsed   Parser result.
 	 * @param array{response:array|WP_Error,code:int|null,body:string,ms:int,etag:string,location:string} $response Transport result.
 	 * @param string                                                                    $trigger  Why this fetch happened, for the stored state.
