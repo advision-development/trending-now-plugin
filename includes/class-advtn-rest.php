@@ -132,7 +132,12 @@ final class ADVTN_REST {
 						'type'              => 'string',
 						'required'          => false,
 						'default'           => '',
-						'sanitize_callback' => static fn( $v ) => preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $v ) ),
+						// Cast, like the four other preg_replace sanitizers in
+						// this codebase. preg_replace() returns string|null —
+						// only on a backtrack limit or malformed UTF-8, but the
+						// declared type here is 'string' and a null stored
+						// against it is a lie the next reader inherits.
+						'sanitize_callback' => static fn( $v ) => (string) preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $v ) ),
 					),
 					'expectedVersion' => array(
 						'type'     => 'string',

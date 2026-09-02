@@ -488,6 +488,7 @@ Requests are rejected outside a 300-second clock skew, replayed signatures are r
 |---|---|---|
 | `POST /ingest` | Trigger a cycle. Body `{"force":false,"source":"src_…"}`, both optional. | `202` scheduled · `200` not due · `409` lock held · `401` auth |
 | `POST /feed-fetch` | Fetch the curated-links feed now. Signed with `ingest_secret`, same as `/ingest`. Defaults to `force`, because an explicit trigger means now. Answers `502` on a failed fetch rather than `200` carrying a failure. | `200` · `502` fetch failed · `401` auth |
+| `POST /sync` | Make this site re-read its curated feed now. **Not HMAC-signed** — authenticated by `sync_key` in the `X-ADVTN-Sync-Key` header, a credential that can do nothing else. Optional `expectedFeed` / `expectedVersion` are labels, never instructions: they cannot change what this site fetches. Answers `retry_queued` and `retry_at` when it arrived behind the expected version. | `200` · `502` fetch failed · `401` auth · `429` rate limited |
 | `GET /items` | Hub mode only. Serves the assembled list to spokes. Params `limit`, `exclude_host`, `since`, `types`. | `200` · `403` not a hub · `401` auth |
 | `GET /status` | Everything on the Diagnostics panel, as JSON. | `200` · `401` auth |
 
@@ -612,7 +613,9 @@ crawled most often — that is where this earns its keep.
 | `manual_feed_token` | — | Optional; empty means a public feed and no header sent |
 | `manual_feed_interval_hours` | `6` | 1–168 |
 | `manual_feed_enabled` | `false` | Needs a URL as well before it does anything |
-| `ingest_secret` | generated | Signs `/ingest` and `/status` |
+| `ingest_secret` | generated | Signs `/ingest`, `/feed-fetch` and `/status` |
+| `sync_key` | generated on first fetch | Authenticates `/sync` and nothing else. Never distributed — the feed learns it from the request this site already makes. Never printed |
+| `sync_key_previous` | — | The value before the last replacement, still accepted so replacing a key does not blind the feed for six hours |
 | `serpapi_key` | — | Required by SerpAPI sources. See constants below |
 | `github_token` | — | Only needed if the plugin repo is private |
 | `auto_update` | `true` | Check GitHub releases, and install them without being asked. `advtn_auto_update` refuses the unattended half; this switches off both |
