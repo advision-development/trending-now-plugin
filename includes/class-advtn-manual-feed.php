@@ -281,6 +281,83 @@ final class ADVTN_Manual_Feed {
 	}
 
 	/**
+	 * Record that a push credential was presented, and whether it was accepted.
+	 *
+	 * WHY THIS EXISTS. Without it there is no observable difference on the site
+	 * between "the far end holds a stale key", "the far end has never pushed
+	 * this site" and "somebody is probing the route". All three look like a
+	 * healthy six-hourly fetch and an empty log, and the site drops out of the
+	 * far end's roster with nothing anywhere to say why. The screen was always
+	 * meant to show whether a key exists *and when it was last presented*.
+	 *
+	 * These markers live in the fetch state option rather than in the log
+	 * because they are fixed size. The log is a 200-row ring, and an
+	 * internet-facing route can be refused up to 30 times per five minutes, so
+	 * a refusal count kept in the log would evict everything else in it — the
+	 * trace would destroy the thing it was added to help debug. A counter
+	 * cannot be flooded.
+	 *
+	 * It deliberately does not go through `write_state()`: that records the
+	 * attempt ring, and a push is not a fetch attempt. Writing one there would
+	 * make the median-latency figures on the Feed subscription tab describe
+	 * somebody else's requests.
+	 *
+	 * @param bool $accepted Whether the presented key matched.
+	 * @return void
+	 */
+	public function record_sync( bool $accepted ): void {
+		$state = $this->state();
+		$now   = gmdate( 'Y-m-d H:i:s' );
+
+		if ( $accepted ) {
+			$state['last_sync_at'] = $now;
+
+			// Zeroed on success on purpose. The count is meant to answer "is
+			// this route being probed right now", and refusals that stopped
+			// once a real push landed are answered by `last_sync_refused_at`.
+			$state['sync_refused'] = 0;
+		} else {
+			$state['last_sync_refused_at'] = $now;
+			$state['sync_refused']         = (int) ( $state['sync_refused'] ?? 0 ) + 1;
+		}
+
+		update_option( self::OPTION_STATE, $state, false );
+	}
+
+	/**
+	 * Whether a refused push is the first of a burst and so worth a log line.
+	 *
+	 * The HMAC routes log every refusal, and mirroring that here would let an
+	 * unauthenticated caller clear the 200-row ring on demand. One line per
+	 * burst says the same thing — "this route is being refused, go look at the
+	 * count" — and bounds the worst case to 24 lines a day under sustained
+	 * probing, which leaves the rest of the log readable.
+	 *
+	 * Pure and static so the throttle is testable without an option store.
+	 * An unparseable or absent timestamp logs: never having seen a refusal and
+	 * not being able to tell when the last one was are both states where the
+	 * line is the useful answer.
+	 *
+	 * @param string $last_refused_at Previous refusal, 'Y-m-d H:i:s' UTC or ''.
+	 * @param int    $now             Current Unix time.
+	 * @param int    $interval        Seconds between log lines.
+	 * @return bool
+	 */
+	public static function refusal_is_new_burst( string $last_refused_at, int $now, int $interval ): bool {
+		if ( '' === $last_refused_at ) {
+			return true;
+		}
+
+		$last = strtotime( $last_refused_at . ' UTC' );
+
+		if ( false === $last ) {
+			return true;
+		}
+
+		return ( $now - $last ) >= $interval;
+	}
+
+	/**
 	 * Whether enough time has passed since the last attempt.
 	 *
 	 * A due-check rather than a fixed clock time, matching the ingest cycle: a

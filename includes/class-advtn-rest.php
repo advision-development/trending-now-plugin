@@ -26,6 +26,15 @@ final class ADVTN_REST {
 	private const SYNC_RETRY_DELAY = 60;
 
 	/**
+	 * Seconds between log lines for refused pushes.
+	 *
+	 * An hour, not the rate-limit window. The log is a 200-row ring shared with
+	 * everything else this plugin records, and one line per five minutes under
+	 * sustained probing would fill it in under a day.
+	 */
+	private const SYNC_REFUSAL_LOG_INTERVAL = HOUR_IN_SECONDS;
+
+	/**
 	 * Settings service.
 	 *
 	 * @var ADVTN_Settings
@@ -323,6 +332,24 @@ final class ADVTN_REST {
 	 * @return true|WP_Error
 	 */
 	public function authorize_sync( WP_REST_Request $request ) {
+		/*
+		 * First, and before the header is even read. The cost of that is real
+		 * and is accepted here rather than left implicit: the bucket is per
+		 * endpoint and not per caller, so every refused anonymous probe spends
+		 * a slot a legitimate push needs, and 30 requests per 300 seconds from
+		 * one client is enough to keep it spent.
+		 *
+		 * It runs first anyway because moving it after the key check turns the
+		 * endpoint into a timing oracle that answers faster for a site that has
+		 * no key than for one whose key is merely wrong — which is exactly the
+		 * map of "which sites have been pushed to" that the single refusal
+		 * message exists to withhold. Making the bucket per caller would fix
+		 * both, but a caller cannot be identified without something it cannot
+		 * forge, and choosing that is a spec decision rather than a fix.
+		 *
+		 * What is done about it here is to make the state legible:
+		 * `record_sync()` below counts refusals where an operator can see them.
+		 */
 		$rate = ADVTN_HMAC::rate_limit( 'sync' );
 
 		if ( is_wp_error( $rate ) ) {
@@ -336,6 +363,8 @@ final class ADVTN_REST {
 			$this->settings->get_string( 'sync_key' ),
 			$this->settings->get_string( 'sync_key_previous' )
 		) ) {
+			$this->record_sync_refusal();
+
 			return new WP_Error(
 				'advtn_sync_refused',
 				__( 'This request was not accepted.', 'trending-now' ),
@@ -343,7 +372,43 @@ final class ADVTN_REST {
 			);
 		}
 
+		advtn()->manual_feed()->record_sync( true );
+
 		return true;
+	}
+
+	/**
+	 * Note a refused push, and log it if it opens a new burst.
+	 *
+	 * The marker is written every time; the log line is throttled. An
+	 * internet-facing route that logged every refusal would let an
+	 * unauthenticated caller evict the whole 200-row ring, so the count in the
+	 * state option carries the magnitude and the log carries the fact.
+	 *
+	 * The refusal itself is unchanged by this: same message, same 401, no
+	 * branch on which reason it was. One refusal for every reason is a property
+	 * of the *response*, and nothing here reaches the response.
+	 *
+	 * @return void
+	 */
+	private function record_sync_refusal(): void {
+		$feed  = advtn()->manual_feed();
+		$state = $feed->state();
+
+		$log = ADVTN_Manual_Feed::refusal_is_new_burst(
+			(string) ( $state['last_sync_refused_at'] ?? '' ),
+			time(),
+			self::SYNC_REFUSAL_LOG_INTERVAL
+		);
+
+		$feed->record_sync( false );
+
+		if ( $log ) {
+			// Matches ADVTN_HMAC::verify()'s line for the signed routes. The
+			// route left no trace at all when probed, where every other
+			// authenticated route in this plugin left one.
+			ADVTN_Logger::log( 'warning', 'Refused a push to /sync: the presented key did not match.' );
+		}
 	}
 
 	/**

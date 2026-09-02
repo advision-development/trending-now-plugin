@@ -1211,6 +1211,30 @@ advtn_assert_same(
 $GLOBALS['advtn_test_options'] = array();
 
 /* -------------------------------------------------------------------------
+ * Throttling the log line for a refused push
+ *
+ * /sync is internet-facing and can be refused 30 times per five minutes. The
+ * HMAC routes log every refusal; mirroring that here would let an
+ * unauthenticated caller evict the whole 200-row log ring, which would destroy
+ * the record the line was added to provide. One line per burst instead, with
+ * the magnitude kept in a counter that cannot be flooded.
+ * ---------------------------------------------------------------------- */
+
+$advtn_burst_now = strtotime( '2026-09-01 12:00:00 UTC' );
+
+advtn_assert_same( true, ADVTN_Manual_Feed::refusal_is_new_burst( '', $advtn_burst_now, HOUR_IN_SECONDS ), 'refusal burst: the first refusal ever is logged' );
+advtn_assert_same( true, ADVTN_Manual_Feed::refusal_is_new_burst( 'not a date', $advtn_burst_now, HOUR_IN_SECONDS ), 'refusal burst: an unreadable timestamp is logged' );
+advtn_assert_same( false, ADVTN_Manual_Feed::refusal_is_new_burst( '2026-09-01 11:59:00', $advtn_burst_now, HOUR_IN_SECONDS ), 'refusal burst: a refusal a minute after the last is not logged again' );
+advtn_assert_same( true, ADVTN_Manual_Feed::refusal_is_new_burst( '2026-09-01 11:00:00', $advtn_burst_now, HOUR_IN_SECONDS ), 'refusal burst: exactly one interval later opens a new burst' );
+advtn_assert_same( true, ADVTN_Manual_Feed::refusal_is_new_burst( '2026-09-01 09:00:00', $advtn_burst_now, HOUR_IN_SECONDS ), 'refusal burst: long after the last opens a new burst' );
+
+// The stored timestamp is UTC, like every other datetime in this plugin. Read
+// as local time on a host west of UTC it would look like the future, and
+// `$now - $last` would go negative — a refusal that never opens a burst and so
+// never logs at all.
+advtn_assert_same( false, ADVTN_Manual_Feed::refusal_is_new_burst( '2026-09-01 12:00:00', $advtn_burst_now, HOUR_IN_SECONDS ), 'refusal burst: a refusal in the same second is not a new burst' );
+
+/* -------------------------------------------------------------------------
  * Whether a commit changed the served list
  *
  * This is the decision that stops a fetch which changed nothing from calling
