@@ -727,12 +727,21 @@ final class ADVTN_Manual_Feed {
 	 * `get_by_ids()`, or the feed omitting rows past their own `expires_at`,
 	 * neither of which is done here.
 	 *
+	 * No default on `$trigger`, deliberately. It had one, and every caller
+	 * passes the argument, so the default was dead — but a default here is how a
+	 * refusal branch added to `fetch()` later, a body-size cap or a
+	 * content-type check, silently stores "did not say" for a fetch that did
+	 * say. The pre-2026-09-02 call shape is still in this file's history and in
+	 * muscle memory, and copying it would raise no error, no failing test and no
+	 * lint complaint. Required, so the omission is an `ArgumentCountError` on
+	 * the first call rather than a wrong sentence on an admin screen.
+	 *
 	 * @param array<string,mixed>                                                       $parsed   Parser result.
 	 * @param array{response:array|WP_Error,code:int|null,body:string,ms:int,etag:string,location:string} $response Transport result.
 	 * @param string                                                                    $trigger  Why this fetch happened, for the stored state.
 	 * @return array{status:string,message:string,count:int,skipped:int,feed:string,version:string}
 	 */
-	private function commit( array $parsed, array $response, string $trigger = '' ): array {
+	private function commit( array $parsed, array $response, string $trigger ): array {
 		$result  = $this->manual->save( $parsed['rows'] );
 		$changed = ! empty( $result['changed'] );
 
@@ -919,13 +928,15 @@ final class ADVTN_Manual_Feed {
 	/**
 	 * Record a failure. The stored list is untouched.
 	 *
+	 * `$trigger` has no default, for the reason given on `commit()`.
+	 *
 	 * @param string   $message Reason.
 	 * @param int|null $code    HTTP status, null on a transport error.
 	 * @param int      $ms      Elapsed milliseconds.
 	 * @param string   $trigger Why this fetch happened, for the stored state.
 	 * @return array{status:string,message:string,count:int,skipped:int,feed:string,version:string}
 	 */
-	private function fail( string $message, ?int $code, int $ms, string $trigger = '' ): array {
+	private function fail( string $message, ?int $code, int $ms, string $trigger ): array {
 		$message = $this->redact( $message );
 
 		// `last_trigger` moves on a failure too: "the timer tried and the feed
