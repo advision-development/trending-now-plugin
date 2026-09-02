@@ -1592,6 +1592,90 @@ advtn_assert_same(
 	'trigger fields: a silent caller overwrites the stored cause rather than leaving a stale one'
 );
 
+/* -------------------------------------------------------------------------
+ * One clock reading per attempt
+ *
+ * The panel's whole predicate is `last_change_at === last_attempt_at`, which is
+ * a property of the WIRING and not of either field. Holding it on the callee
+ * side only left it open one level up: inlining `gmdate( 'Y-m-d H:i:s' )` at the
+ * call site reads as a harmless "same clock" tidy-up, passed 359 of 359, and
+ * would tell an operator that the fetch which moved their link changed nothing
+ * whenever the two readings straddled a second. `commit()` cannot be reached
+ * from here, so the wiring is `commit_patch()` and it is asserted rather than
+ * described.
+ * ---------------------------------------------------------------------- */
+
+$advtn_commit_facts = array(
+	'http_code'  => 200,
+	'item_count' => 7,
+	'skipped'    => 1,
+	'feed'       => 'trending-uk',
+	'version'    => '2026-09-02T10:00:00Z',
+	'etag'       => 'W/"abc"',
+);
+
+$advtn_commit_moved = ADVTN_Manual_Feed::commit_patch( true, 'sync', $advtn_changed_at, $advtn_commit_facts );
+
+// THE INVARIANT. Every field this attempt dates is dated by the reading handed
+// in, so a second `gmdate()` anywhere in the wiring — at the call site or inside
+// it — produces a live timestamp here instead of the fixture and fails this.
+advtn_assert_same(
+	array( $advtn_changed_at, $advtn_changed_at, $advtn_changed_at ),
+	array(
+		$advtn_commit_moved['last_attempt_at'],
+		$advtn_commit_moved['last_success_at'],
+		$advtn_commit_moved['last_change_at'],
+	),
+	'commit patch: one clock reading dates the attempt, the commit and the change'
+);
+
+advtn_assert_same(
+	array(
+		'http_code'            => 200,
+		'item_count'           => 7,
+		'skipped'              => 1,
+		'feed'                 => 'trending-uk',
+		'version'              => '2026-09-02T10:00:00Z',
+		'etag'                 => 'W/"abc"',
+		'last_attempt_at'      => $advtn_changed_at,
+		'last_success_at'      => $advtn_changed_at,
+		'error'                => '',
+		'last_trigger'         => 'sync',
+		'last_success_trigger' => 'sync',
+		'last_change_at'       => $advtn_changed_at,
+	),
+	$advtn_commit_moved,
+	'commit patch: a fetch that moved the list carries every field and clears the error'
+);
+
+// The asymmetry, at the level that writes it: an identical commit is still a
+// commit — `last_success_at` advances — and still not a change.
+$advtn_commit_same = ADVTN_Manual_Feed::commit_patch( false, 'sync', $advtn_changed_at, $advtn_commit_facts );
+
+advtn_assert_same(
+	array( $advtn_changed_at, false, false ),
+	array(
+		$advtn_commit_same['last_success_at'],
+		array_key_exists( 'last_change_at', $advtn_commit_same ),
+		array_key_exists( 'last_success_trigger', $advtn_commit_same ),
+	),
+	'commit patch: an unchanged fetch is dated as a commit and not as a change'
+);
+
+// Ordering, not decoration: the dated fields are merged after the facts, so a
+// fact arriving under one of their names cannot displace the clock the patch is
+// dated by. Nothing sends one today.
+advtn_assert_same(
+	$advtn_changed_at,
+	ADVTN_Manual_Feed::commit_patch(
+		true,
+		'cron',
+		$advtn_changed_at,
+		array( 'last_attempt_at' => '1999-01-01 00:00:00', 'error' => 'stale' )
+	)['last_attempt_at'],
+	'commit patch: a fact cannot displace the clock the patch is dated by'
+);
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );

@@ -231,6 +231,56 @@ final class ADVTN_Manual_Feed {
 	}
 
 	/**
+	 * The whole state patch a successful fetch writes.
+	 *
+	 * THIS EXISTS FOR ONE INVARIANT: every field dated by this attempt is dated
+	 * by the SAME reading of the clock.
+	 *
+	 * The Feed subscription panel answers "did *this* fetch move the list" with
+	 * `last_change_at === last_attempt_at`. That equality is the whole predicate,
+	 * and it is a property of the wiring rather than of either field: two
+	 * `gmdate()` calls a microsecond apart can straddle a second boundary, and
+	 * the panel would then tell an operator that the fetch which moved their
+	 * link changed nothing — the fault this round exists to fix, inverted.
+	 *
+	 * `commit()` needs `$wpdb`, `advtn()` and HTTP, so the invariant could only
+	 * be stated there as a comment, and a comment is what this branch has now
+	 * been caught by four times. So the wiring moved here, where it is asserted,
+	 * and `commit()` keeps no clock of its own: `$now` arrives as one argument,
+	 * so there is one reading and no second one to drift from it. The shape that
+	 * carried the bug — a local handed to one field and `gmdate()` inlined at
+	 * the other — is no longer expressible in the caller.
+	 *
+	 * `$facts` is merged first so the three dated fields and `error` cannot be
+	 * displaced by a fact carrying one of their names. Nothing does today; the
+	 * ordering means nothing can.
+	 *
+	 * `last_success_at` is dated on every commit, including the ones that stored
+	 * a list identical to the one already held. `last_change_at` is dated only
+	 * when the list moved, by `trigger_fields()`. That asymmetry is the reason
+	 * `last_success_at` could never date the screen's sentence, and it is
+	 * deliberate — the reasoning is on `trigger_fields()`.
+	 *
+	 * @param bool                $changed Whether the fetch moved the served list.
+	 * @param string              $trigger Raw trigger from a caller.
+	 * @param string              $now     UTC datetime of this attempt, `Y-m-d H:i:s`.
+	 * @param array<string,mixed> $facts   Fields read out of the response and the
+	 *                                     parse: code, counts, feed, version, etag.
+	 * @return array<string,mixed>
+	 */
+	public static function commit_patch( bool $changed, string $trigger, string $now, array $facts ): array {
+		return array_merge(
+			$facts,
+			array(
+				'last_attempt_at' => $now,
+				'last_success_at' => $now,
+				'error'           => '',
+			),
+			self::trigger_fields( $changed, $trigger, $now )
+		);
+	}
+
+	/**
 	 * What this site says about itself on a feed fetch.
 	 *
 	 * Two query parameters, and they are the whole of the plugin's half of the
@@ -755,39 +805,28 @@ final class ADVTN_Manual_Feed {
 		$skipped = (int) $parsed['skipped'] + count( $result['errors'] );
 
 		/*
-		 * ONE CLOCK READING, THREE FIELDS THAT ARE NOT HALVES OF ONE FACT.
+		 * The clock is read here and nowhere else in this method, and it is
+		 * passed as one argument rather than kept in a local. Which fields it
+		 * dates, and that they are all dated by this one reading, is
+		 * `commit_patch()`'s job — stated there, and asserted, because the
+		 * screen's "did this fetch move the list" is that equality and nothing
+		 * else. A local here would invite a second `gmdate()` beside it, which
+		 * is precisely the drift a comment could not prevent.
 		 *
-		 * `last_success_at` means "the last commit" and advances here on every
-		 * commit, the ones that stored a list identical to the one already held
-		 * included. `last_change_at` means "the last time the list moved" and is
-		 * written by `trigger_fields()` only when it did. `last_trigger` and
-		 * `last_success_trigger` are the causes of those two different events.
-		 * The reasoning for the gate, and for what a silent caller does to
-		 * `last_success_trigger`, is on `trigger_fields()`.
-		 *
-		 * `$now` is read once and handed to both `last_attempt_at` and (through
-		 * `trigger_fields()`) `last_change_at`, because their string equality is
-		 * the predicate the Feed subscription panel reads as "this fetch moved
-		 * the list". Two `gmdate()` calls a microsecond apart can straddle a
-		 * second boundary, and the panel would then tell an operator that a
-		 * fetch which did move the list changed nothing. They also have to land
-		 * in one option write, which the single `$patch` guarantees.
+		 * One `$patch`, so the fields also land in one option write.
 		 */
-		$now = gmdate( 'Y-m-d H:i:s' );
-
-		$patch = array_merge(
+		$patch = self::commit_patch(
+			$changed,
+			$trigger,
+			gmdate( 'Y-m-d H:i:s' ),
 			array(
-				'last_attempt_at' => $now,
-				'last_success_at' => $now,
-				'http_code'       => (int) $response['code'],
-				'error'           => '',
-				'item_count'      => $stored,
-				'skipped'         => $skipped,
-				'feed'            => (string) $parsed['slug'],
-				'version'         => (string) $parsed['version'],
-				'etag'            => (string) $response['etag'],
-			),
-			self::trigger_fields( $changed, $trigger, $now )
+				'http_code'  => (int) $response['code'],
+				'item_count' => $stored,
+				'skipped'    => $skipped,
+				'feed'       => (string) $parsed['slug'],
+				'version'    => (string) $parsed['version'],
+				'etag'       => (string) $response['etag'],
+			)
 		);
 
 		$this->write_state(
