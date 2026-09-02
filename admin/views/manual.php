@@ -308,7 +308,25 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 						?>
 					</strong>
 				</p>
-				<?php if ( '' !== $advtn_last_refused ) : ?>
+				<?php
+				/*
+				 * `sync_refused` and `last_sync_refused_at` answer different
+				 * questions over different windows: the count is refusals
+				 * since the last accepted push (zeroed by `record_sync()` on
+				 * acceptance, on purpose — see the comment there), the
+				 * timestamp is the most recent refusal ever. A non-zero count
+				 * is a route being refused right now — the badge earns its
+				 * `--bad` colour and the sentence names the ongoing cause. A
+				 * zero count with a timestamp is a refusal that stopped once
+				 * a real push landed — a rotated key catching up, which is
+				 * this working as designed, not a fault. Pairing that with a
+				 * `--bad` badge — or any badge headlining the word "refused"
+				 * next to a sentence that already says it — would render the
+				 * annotation louder than the fact it describes, so this state
+				 * carries no badge at all.
+				 */
+				?>
+				<?php if ( $advtn_refused_n > 0 ) : ?>
 					<p class="description">
 						<span class="advtn-badge advtn-badge--bad"><?php esc_html_e( 'refused', 'trending-now' ); ?></span>
 						<?php
@@ -316,6 +334,16 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 							/* translators: 1: refusal count, 2: UTC datetime. */
 							esc_html__( '%1$d push(es) refused, most recently %2$s UTC. A refusal means the key presented was not this site\'s current or previous one — either the feed is holding an old one, or something is probing the route.', 'trending-now' ),
 							$advtn_refused_n,
+							esc_html( $advtn_last_refused )
+						);
+						?>
+					</p>
+				<?php elseif ( '' !== $advtn_last_refused ) : ?>
+					<p class="description">
+						<?php
+						printf(
+							/* translators: %s: UTC datetime of the most recent refusal, from before the last accepted push. */
+							esc_html__( 'No pushes have been refused since the last one was accepted. The most recent refusal was %s UTC — a refusal followed by an accepted push means a rotated key caught up, which is this working as intended.', 'trending-now' ),
 							esc_html( $advtn_last_refused )
 						);
 						?>
