@@ -43,7 +43,7 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   each item's exposure window at a moment no visitor saw it, and on a quiet site the
   guaranteed window could expire before a crawler ever arrived — the one failure the floor
   exists to prevent. This affects the six-hourly timer as well as a push; both go through
-  the same call site. An unchanged fetch now skips the rebuild and the three cache purges,
+  the same call site. An unchanged fetch now skips the rebuild and the two cache purges,
   and "unchanged" means the list a visitor would be served, not the response bytes.
 
 - **The feed request follows no redirects.** It carries the shared feed token *and* this
