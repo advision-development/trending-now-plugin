@@ -1449,6 +1449,52 @@ advtn_assert_same(
 
 $GLOBALS['advtn_test_options'] = array();
 
+/* -------------------------------------------------------------------------
+ * Which clock asked for this fetch
+ *
+ * Four callers, and until now three of them said nothing. The cron is the one
+ * that matters: "the last fetch was a push" and "the last fetch was the timer"
+ * are the two answers somebody debugging a link that did not appear actually
+ * needs, and an empty trigger could mean either.
+ * ---------------------------------------------------------------------- */
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0', 'trigger' => 'cron' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', 'cron' ),
+	'identity: cron is a known trigger'
+);
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0', 'trigger' => 'rest' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', 'rest' ),
+	'identity: rest is a known trigger'
+);
+
+// The vocabulary stays closed. The value lands in a log column on the far end,
+// so a name this side cannot produce is a value nobody chose.
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', 'cronjob' ),
+	'identity: a near-miss trigger is dropped, not corrected'
+);
+
+/*
+ * The words a person reads. Never the token: printing `cron` prints the
+ * mechanism, and the whole point of this field is that somebody who is not
+ * reading the source can tell a push from a timer.
+ */
+advtn_assert_same( 'a push from the feed', ADVTN_Manual_Feed::trigger_words( 'sync' ), 'words: sync' );
+advtn_assert_same( 'the six-hourly timer', ADVTN_Manual_Feed::trigger_words( 'cron' ), 'words: cron' );
+advtn_assert_same( 'somebody pressing Fetch now', ADVTN_Manual_Feed::trigger_words( 'manual' ), 'words: manual' );
+advtn_assert_same( 'a signed request to this site', ADVTN_Manual_Feed::trigger_words( 'rest' ), 'words: rest' );
+
+// Absent is not a value. Every fetch made before this shipped says nothing, and
+// on a six-hour timer those are most of a first day — so this reads as "did not
+// say" rather than as a guess, for the same reason the Sync tab stopped
+// blaming old plugins for three different things in 2f22ad5.
+advtn_assert_same( 'not recorded', ADVTN_Manual_Feed::trigger_words( '' ), 'words: absent says it did not say' );
+advtn_assert_same( 'not recorded', ADVTN_Manual_Feed::trigger_words( 'whatever' ), 'words: an unknown token is not invented into a cause' );
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );

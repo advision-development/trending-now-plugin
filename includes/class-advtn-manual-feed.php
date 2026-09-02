@@ -104,9 +104,62 @@ final class ADVTN_Manual_Feed {
 	 * nobody chose — refused rather than sanitised, because sanitising invents
 	 * a value where dropping admits there was none.
 	 *
+	 * `cron` was added on 2026-09-02 and it is the reason this list exists at
+	 * all: with only `sync` and `manual` in it, a scheduled fetch sent nothing,
+	 * and an absent trigger meant either "the timer" or "a plugin too old to
+	 * say". Those are different answers and somebody debugging a link that did
+	 * not appear needs to know which.
+	 *
 	 * @var array<int,string>
 	 */
-	private const TRIGGERS = array( 'sync', 'manual' );
+	private const TRIGGERS = array( 'sync', 'manual', 'cron', 'rest' );
+
+	/**
+	 * A trigger reduced to one of TRIGGERS, or ''.
+	 *
+	 * One definition of the filter, used by both the thing that puts the value
+	 * on the wire and the thing that stores it. Two copies would let the site
+	 * keep a name it never sent, or send one it never kept.
+	 *
+	 * @param string $trigger Raw trigger from a caller.
+	 * @return string A known trigger, or '' for anything else.
+	 */
+	private static function known_trigger( string $trigger ): string {
+		$trigger = trim( $trigger );
+
+		return in_array( $trigger, self::TRIGGERS, true ) ? $trigger : '';
+	}
+
+	/**
+	 * The sentence a person reads for a trigger.
+	 *
+	 * Words, never the token. `cron` on a screen prints the mechanism, and the
+	 * point of this field is that somebody who is not reading the source can
+	 * tell a push from a timer.
+	 *
+	 * An unknown or absent value is "not recorded" and never a guess. Every
+	 * fetch made before this shipped carries nothing, and on a six-hour timer
+	 * those outnumber the rest for a day — inventing "the timer" for them would
+	 * be the same defect the console's unregistered-addresses sentence had, one
+	 * label over several causes.
+	 *
+	 * @param string $trigger Stored trigger, possibly empty.
+	 * @return string
+	 */
+	public static function trigger_words( string $trigger ): string {
+		switch ( $trigger ) {
+			case 'sync':
+				return __( 'a push from the feed', 'trending-now' );
+			case 'cron':
+				return __( 'the six-hourly timer', 'trending-now' );
+			case 'manual':
+				return __( 'somebody pressing Fetch now', 'trending-now' );
+			case 'rest':
+				return __( 'a signed request to this site', 'trending-now' );
+			default:
+				return __( 'not recorded', 'trending-now' );
+		}
+	}
 
 	/**
 	 * What this site says about itself on a feed fetch.
@@ -147,7 +200,7 @@ final class ADVTN_Manual_Feed {
 		$identity = array();
 		$home     = trim( $home );
 		$version  = trim( $version );
-		$trigger  = trim( $trigger );
+		$trigger  = self::known_trigger( $trigger );
 
 		if ( '' !== $home ) {
 			$identity['site'] = $home;
@@ -160,7 +213,7 @@ final class ADVTN_Manual_Feed {
 		// A trigger alone says nothing about which site this is: it is a label
 		// on the other two, not a third fact, so it is withheld when neither
 		// site nor version made it into the identity.
-		if ( ! empty( $identity ) && in_array( $trigger, self::TRIGGERS, true ) ) {
+		if ( ! empty( $identity ) && '' !== $trigger ) {
 			$identity['trigger'] = $trigger;
 		}
 
@@ -427,6 +480,11 @@ final class ADVTN_Manual_Feed {
 	 * @return array{status:string,message:string,count:int,skipped:int,feed:string,version:string}
 	 */
 	public function fetch( bool $force = false, string $trigger = '' ): array {
+		// Filtered once, here, so the value sent and the value stored cannot
+		// disagree — and so a caller nobody has taught to name itself stores
+		// '' ("did not say") rather than a token no screen can read.
+		$trigger = self::known_trigger( $trigger );
+
 		if ( ! $this->settings->feed_is_active() ) {
 			return $this->outcome( 'subscribed_off', __( 'This site is not subscribed to a feed.', 'trending-now' ) );
 		}
@@ -438,13 +496,13 @@ final class ADVTN_Manual_Feed {
 		$url = $this->settings->get_string( 'manual_feed_url' );
 
 		if ( ! ADVTN_URL::is_valid( $url ) ) {
-			return $this->fail( __( 'The feed URL is not a valid public http(s) address.', 'trending-now' ), null, 0 );
+			return $this->fail( __( 'The feed URL is not a valid public http(s) address.', 'trending-now' ), null, 0, $trigger );
 		}
 
 		$response = $this->request( $url, $force, $trigger );
 
 		if ( is_wp_error( $response['response'] ) ) {
-			return $this->fail( $response['response']->get_error_message(), null, $response['ms'] );
+			return $this->fail( $response['response']->get_error_message(), null, $response['ms'], $trigger );
 		}
 
 		// A 304 means the version already held is current. Nothing to commit,
@@ -454,6 +512,7 @@ final class ADVTN_Manual_Feed {
 			$this->write_state(
 				array(
 					'last_attempt_at' => gmdate( 'Y-m-d H:i:s' ),
+					'last_trigger'    => $trigger,
 					'http_code'       => 304,
 					'error'           => '',
 				),
@@ -497,7 +556,8 @@ final class ADVTN_Manual_Feed {
 					/* translators: 1: HTTP status code, 2: target hostname. */
 					: sprintf( __( 'The feed URL answered HTTP %1$d, redirecting to %2$s. Redirects are not followed, because the request carries this site\'s credentials and they must not be handed to whatever the redirect points at. Put the final URL in the field instead.', 'trending-now' ), (int) $response['code'], $target ),
 				$response['code'],
-				$response['ms']
+				$response['ms'],
+				$trigger
 			);
 		}
 
@@ -517,16 +577,16 @@ final class ADVTN_Manual_Feed {
 				/* translators: %d: HTTP status code. */
 				: sprintf( __( 'The feed returned HTTP %d.', 'trending-now' ), (int) $response['code'] );
 
-			return $this->fail( $message, $response['code'], $response['ms'] );
+			return $this->fail( $message, $response['code'], $response['ms'], $trigger );
 		}
 
 		$parsed = ADVTN_Manual_Feed_Parser::parse( $response['body'] );
 
 		if ( ! $parsed['ok'] ) {
-			return $this->fail( $parsed['error'], $response['code'], $response['ms'] );
+			return $this->fail( $parsed['error'], $response['code'], $response['ms'], $trigger );
 		}
 
-		return $this->commit( $parsed, $response );
+		return $this->commit( $parsed, $response, $trigger );
 	}
 
 	/**
@@ -561,12 +621,14 @@ final class ADVTN_Manual_Feed {
 	 *
 	 * @param array<string,mixed>                                                       $parsed   Parser result.
 	 * @param array{response:array|WP_Error,code:int|null,body:string,ms:int,etag:string,location:string} $response Transport result.
+	 * @param string                                                                    $trigger  Why this fetch happened, for the stored state.
 	 * @return array{status:string,message:string,count:int,skipped:int,feed:string,version:string}
 	 */
-	private function commit( array $parsed, array $response ): array {
-		$result = $this->manual->save( $parsed['rows'] );
+	private function commit( array $parsed, array $response, string $trigger = '' ): array {
+		$result  = $this->manual->save( $parsed['rows'] );
+		$changed = ! empty( $result['changed'] );
 
-		if ( ! empty( $result['changed'] ) ) {
+		if ( $changed ) {
 			advtn()->selector()->build_and_commit();
 			advtn()->renderer()->purge_cache();
 			ADVTN_Page_Cache::purge();
@@ -575,18 +637,53 @@ final class ADVTN_Manual_Feed {
 		$stored  = count( $result['links'] );
 		$skipped = (int) $parsed['skipped'] + count( $result['errors'] );
 
+		/*
+		 * TWO TRIGGER FIELDS, BECAUSE THEY ANSWER DIFFERENT QUESTIONS.
+		 *
+		 * `last_trigger` is what asked for the most recent attempt.
+		 * `last_success_trigger` is what asked for the most recent fetch that
+		 * actually moved this site's list, and it is the one that matters:
+		 * "the last attempt was a push" does not say whether the push changed
+		 * anything, while "the last time this list moved, it was a push" is
+		 * what somebody debugging a link that did not propagate is asking.
+		 *
+		 * A 304 advances the first and not the second — nothing was committed.
+		 * So does a commit that stored a list identical to the one already
+		 * held: the feed served the same links, `changed` is false, and no
+		 * rebuild happened. Gating on `changed` rather than on "we reached
+		 * commit()" is deliberate. Forced fetches — every push and every
+		 * *Fetch now* — send no ETag, so an unchanged feed cannot answer 304 to
+		 * them; the identical-commit case *is* the ordinary case on the pushed
+		 * path. Advancing the field there would tell an operator the list last
+		 * changed from a push, on precisely the fetch where the push delivered
+		 * the same list that was missing their link. The distinction would also
+		 * rest on whether the feed happens to send an ETag, which is not a fact
+		 * about this site's list.
+		 *
+		 * The consequence, recorded rather than hidden: `last_success_at`
+		 * advances on every commit and `last_success_trigger` does not, so they
+		 * are not two halves of one fact. The screen wording says which is
+		 * which — "the list last changed from …", never "last success".
+		 */
+		$patch = array(
+			'last_attempt_at' => gmdate( 'Y-m-d H:i:s' ),
+			'last_success_at' => gmdate( 'Y-m-d H:i:s' ),
+			'last_trigger'    => $trigger,
+			'http_code'       => (int) $response['code'],
+			'error'           => '',
+			'item_count'      => $stored,
+			'skipped'         => $skipped,
+			'feed'            => (string) $parsed['slug'],
+			'version'         => (string) $parsed['version'],
+			'etag'            => (string) $response['etag'],
+		);
+
+		if ( $changed ) {
+			$patch['last_success_trigger'] = $trigger;
+		}
+
 		$this->write_state(
-			array(
-				'last_attempt_at' => gmdate( 'Y-m-d H:i:s' ),
-				'last_success_at' => gmdate( 'Y-m-d H:i:s' ),
-				'http_code'       => (int) $response['code'],
-				'error'           => '',
-				'item_count'      => $stored,
-				'skipped'         => $skipped,
-				'feed'            => (string) $parsed['slug'],
-				'version'         => (string) $parsed['version'],
-				'etag'            => (string) $response['etag'],
-			),
+			$patch,
 			true,
 			(int) $response['ms'],
 			(int) $response['code'],
@@ -726,14 +823,20 @@ final class ADVTN_Manual_Feed {
 	 * @param string   $message Reason.
 	 * @param int|null $code    HTTP status, null on a transport error.
 	 * @param int      $ms      Elapsed milliseconds.
+	 * @param string   $trigger Why this fetch happened, for the stored state.
 	 * @return array{status:string,message:string,count:int,skipped:int,feed:string,version:string}
 	 */
-	private function fail( string $message, ?int $code, int $ms ): array {
+	private function fail( string $message, ?int $code, int $ms, string $trigger = '' ): array {
 		$message = $this->redact( $message );
 
+		// `last_trigger` moves on a failure too: "the timer tried and the feed
+		// refused it" and "a push tried and the feed refused it" are different
+		// situations, and the failed attempt is the row somebody is looking at.
+		// `last_success_trigger` is untouched — nothing was committed.
 		$this->write_state(
 			array(
 				'last_attempt_at' => gmdate( 'Y-m-d H:i:s' ),
+				'last_trigger'    => $trigger,
 				'http_code'       => $code,
 				'error'           => $message,
 			),
@@ -822,7 +925,7 @@ final class ADVTN_Manual_Feed {
 	 * @return void
 	 */
 	public function on_scheduled_fetch(): void {
-		$this->fetch( false );
+		$this->fetch( false, 'cron' );
 	}
 
 	/**

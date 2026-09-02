@@ -1122,7 +1122,7 @@ final class ADVTN_Admin {
 	public function handle_fetch_feed(): void {
 		$this->guard( 'advtn_fetch_feed' );
 
-		$result = advtn()->manual_feed()->fetch( true );
+		$result = advtn()->manual_feed()->fetch( true, 'manual' );
 
 		$notice = 'failed' === $result['status'] ? 'feed_failed' : 'feed_fetched';
 

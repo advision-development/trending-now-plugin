@@ -234,7 +234,7 @@ final class ADVTN_REST {
 	 * @return WP_REST_Response
 	 */
 	public function handle_feed_fetch( WP_REST_Request $request ): WP_REST_Response {
-		$result = advtn()->manual_feed()->fetch( (bool) $request->get_param( 'force' ) );
+		$result = advtn()->manual_feed()->fetch( (bool) $request->get_param( 'force' ), 'rest' );
 
 		return new WP_REST_Response( $result, 'failed' === $result['status'] ? 502 : 200 );
 	}

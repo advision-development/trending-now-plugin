@@ -89,6 +89,15 @@ final class ADVTN_CLI {
 	public function feed_fetch( array $args, array $assoc_args ): void {
 		unset( $args );
 
+		/*
+		 * NO TRIGGER, DELIBERATELY. `TRIGGERS` is closed and mirrored in three
+		 * places that cannot import each other — here, the feed's normaliser
+		 * and the console's renderer — so a fifth name invented on this side is
+		 * a name the other two drop. `manual` is the nearest fit and it is
+		 * wrong: it reads on screen as "somebody pressing Fetch now", and
+		 * nobody pressed anything. An absent trigger is the honest "this fetch
+		 * did not say", which is what the screens already render for it.
+		 */
 		$result = advtn()->manual_feed()->fetch( isset( $assoc_args['force'] ) );
 
 		switch ( $result['status'] ) {
