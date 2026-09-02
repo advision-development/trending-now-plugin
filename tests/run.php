@@ -1232,6 +1232,51 @@ advtn_assert_same(
 $GLOBALS['advtn_test_options'] = array();
 
 /* -------------------------------------------------------------------------
+ * The log redacts every credential this plugin holds
+ *
+ * The scrub list is matched as substrings, and `sync_key` matched none of the
+ * original six — `api_key` was there, plain `key` was not. Nothing logged it at
+ * the time, which is exactly the shape of trap this covers: the guard has to
+ * hold before somebody adds the diagnostic, not after.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['advtn_test_options'] = array();
+
+ADVTN_Logger::clear();
+ADVTN_Logger::log(
+	'info',
+	'settings saved',
+	array(
+		'ingest_secret'      => 'secret-value',
+		'manual_feed_token'  => 'token-value',
+		'serpapi_key'        => 'serpapi-value',
+		'sync_key'           => 'sync-value',
+		'sync_key_previous'  => 'previous-value',
+		'signature'          => 'signature-value',
+		'password'           => 'password-value',
+		'apikey'             => 'apikey-value',
+		'manual_feed_url'    => 'https://feed.example/pbn-sample',
+	)
+);
+
+$advtn_log_context = ADVTN_Logger::entries()[0]['context'];
+
+foreach (
+	array( 'ingest_secret', 'manual_feed_token', 'serpapi_key', 'sync_key', 'sync_key_previous', 'signature', 'password', 'apikey' )
+	as $advtn_cred
+) {
+	advtn_assert_same( '[redacted]', $advtn_log_context[ $advtn_cred ], 'log scrub: ' . $advtn_cred . ' is redacted' );
+}
+
+// Not everything is a credential. Redacting the feed URL would take away the
+// one field an operator needs to see to diagnose a wrong slug — the failure
+// mode the feed answers 401 for and cannot name.
+advtn_assert_same( 'https://feed.example/pbn-sample', $advtn_log_context['manual_feed_url'], 'log scrub: an ordinary setting is left alone' );
+
+ADVTN_Logger::clear();
+$GLOBALS['advtn_test_options'] = array();
+
+/* -------------------------------------------------------------------------
  * Throttling the log line for a refused push
  *
  * /sync is internet-facing and can be refused 30 times per five minutes. The

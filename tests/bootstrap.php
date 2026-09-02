@@ -239,6 +239,7 @@ if ( ! function_exists( 'update_option' ) ) {
 require_once dirname( __DIR__ ) . '/includes/class-advtn-url.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-path-match.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-attempts.php';
+require_once dirname( __DIR__ ) . '/includes/class-advtn-logger.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-manual-feed-parser.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-manual-feed.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-hmac.php';
