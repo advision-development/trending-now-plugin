@@ -234,44 +234,52 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 					<p class="description"><?php esc_html_e( 'None yet. This site invents one the first time it fetches a feed, and the feed learns it from that request — there is nothing to copy anywhere.', 'trending-now' ); ?></p>
 				<?php else : ?>
 					<p class="description"><?php esc_html_e( 'In place. It lets the feed tell this site to re-read now instead of waiting for the timer, and it can do nothing else — not trigger an ingest, not read this site\'s sources.', 'trending-now' ); ?></p>
-					<?php
-					/*
-					 * When it was last presented, never the value.
-					 *
-					 * These three lines are the difference between "the feed
-					 * holds a stale key", "the feed has never pushed this site"
-					 * and "somebody is probing the route". All three used to
-					 * look identical here: a healthy fetch and "In place".
-					 */
-					$advtn_last_sync    = (string) ( $advtn_feed_state['last_sync_at'] ?? '' );
-					$advtn_last_refused = (string) ( $advtn_feed_state['last_sync_refused_at'] ?? '' );
-					$advtn_refused_n    = (int) ( $advtn_feed_state['sync_refused'] ?? 0 );
-					?>
+				<?php endif; ?>
+				<?php
+				/*
+				 * When it was last presented, never the value.
+				 *
+				 * These are about the ROUTE, not about whether a key
+				 * exists, so they render outside the branch above —
+				 * including when the key is unset. A site that has never
+				 * fetched has no key, so every push to it is refused and
+				 * counted; that is exactly the site somebody opens this
+				 * tab to investigate, and it must not be the one case
+				 * where the refusal count is invisible.
+				 *
+				 * These three lines are the difference between "the feed
+				 * holds a stale key", "the feed has never pushed this site"
+				 * and "somebody is probing the route". All three used to
+				 * look identical here: a healthy fetch and "In place".
+				 */
+				$advtn_last_sync    = (string) ( $advtn_feed_state['last_sync_at'] ?? '' );
+				$advtn_last_refused = (string) ( $advtn_feed_state['last_sync_refused_at'] ?? '' );
+				$advtn_refused_n    = (int) ( $advtn_feed_state['sync_refused'] ?? 0 );
+				?>
+				<p class="description">
+					<?php esc_html_e( 'Last accepted push:', 'trending-now' ); ?>
+					<strong>
+						<?php
+						echo esc_html(
+							'' === $advtn_last_sync
+								? __( 'never — the feed has not pushed this site yet, or the key it holds is not this one', 'trending-now' )
+								: $advtn_last_sync . ' UTC'
+						);
+						?>
+					</strong>
+				</p>
+				<?php if ( '' !== $advtn_last_refused ) : ?>
 					<p class="description">
-						<?php esc_html_e( 'Last accepted push:', 'trending-now' ); ?>
-						<strong>
-							<?php
-							echo esc_html(
-								'' === $advtn_last_sync
-									? __( 'never — the feed has not pushed this site yet, or the key it holds is not this one', 'trending-now' )
-									: $advtn_last_sync . ' UTC'
-							);
-							?>
-						</strong>
+						<span class="advtn-badge advtn-badge--bad"><?php esc_html_e( 'refused', 'trending-now' ); ?></span>
+						<?php
+						printf(
+							/* translators: 1: refusal count, 2: UTC datetime. */
+							esc_html__( '%1$d push(es) refused, most recently %2$s UTC. A refusal means the key presented was not this site\'s current or previous one — either the feed is holding an old one, or something is probing the route.', 'trending-now' ),
+							$advtn_refused_n,
+							esc_html( $advtn_last_refused )
+						);
+						?>
 					</p>
-					<?php if ( '' !== $advtn_last_refused ) : ?>
-						<p class="description">
-							<span class="advtn-badge advtn-badge--bad"><?php esc_html_e( 'refused', 'trending-now' ); ?></span>
-							<?php
-							printf(
-								/* translators: 1: refusal count, 2: UTC datetime. */
-								esc_html__( '%1$d push(es) refused, most recently %2$s UTC. A refusal means the key presented was not this site\'s current or previous one — either the feed is holding an old one, or something is probing the route.', 'trending-now' ),
-								$advtn_refused_n,
-								esc_html( $advtn_last_refused )
-							);
-							?>
-						</p>
-					<?php endif; ?>
 				<?php endif; ?>
 			</td>
 		</tr>
