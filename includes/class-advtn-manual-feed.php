@@ -411,6 +411,28 @@ final class ADVTN_Manual_Feed {
 	 * somebody will legitimately want to do — but it is logged as a warning,
 	 * because it is also what an upstream mistake looks like.
 	 *
+	 * A COMMIT THAT CHANGED NOTHING MUST NOT REBUILD. `build_and_commit()` is
+	 * not a read: it calls `mark_shown()`, which increments `times_shown` and
+	 * sets the write-once `first_shown_at` on every selected row. This plugin's
+	 * whole purpose is to give each new URL a guaranteed window of exposure,
+	 * and that window is counted from `first_shown_at`, so stamping it on a
+	 * fetch nobody looked at starts the clock at a moment no visitor saw the
+	 * item — the exposure floor can then expire before the item is ever
+	 * crawled, which is the one failure this plugin exists to prevent.
+	 * `CLAUDE.md` names the hazard twice, and `ADVTN_Selector::forget()` exists
+	 * precisely so housekeeping does not do this. A fetch that re-serves the
+	 * same links is housekeeping.
+	 *
+	 * It matters most on the pushed path. `/sync` calls `fetch( true )`, so
+	 * `conditional_etag()` returns '' and a 304 is impossible: every push
+	 * reaches here, up to the rate limit's 30 per five minutes per site. But
+	 * the six-hourly timer has the same defect at four a day, and this is the
+	 * one call site behind both, so fixing it here fixes both.
+	 *
+	 * Expiry is not a reason to rebuild from here. A link whose timer runs out
+	 * has its own scheduled event — `ADVTN_Manual::on_expiry()`, rescheduled by
+	 * `save()` on every commit — which retires the row and rebuilds there.
+	 *
 	 * @param array<string,mixed>                                                       $parsed   Parser result.
 	 * @param array{response:array|WP_Error,code:int|null,body:string,ms:int,etag:string} $response Transport result.
 	 * @return array{status:string,message:string,count:int,skipped:int,feed:string,version:string}
@@ -418,9 +440,11 @@ final class ADVTN_Manual_Feed {
 	private function commit( array $parsed, array $response ): array {
 		$result = $this->manual->save( $parsed['rows'] );
 
-		advtn()->selector()->build_and_commit();
-		advtn()->renderer()->purge_cache();
-		ADVTN_Page_Cache::purge();
+		if ( ! empty( $result['changed'] ) ) {
+			advtn()->selector()->build_and_commit();
+			advtn()->renderer()->purge_cache();
+			ADVTN_Page_Cache::purge();
+		}
 
 		$stored  = count( $result['links'] );
 		$skipped = (int) $parsed['skipped'] + count( $result['errors'] );

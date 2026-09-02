@@ -123,8 +123,13 @@ final class ADVTN_Manual {
 	/**
 	 * Replace the whole list, validating each row.
 	 *
+	 * `changed` reports whether the list a visitor would be served differs from
+	 * the one that was stored before this call. Callers use it to decide whether
+	 * a selection rebuild is warranted — see `served_list_changed()` for why
+	 * that decision cannot be left to the caller's own `===`.
+	 *
 	 * @param array<int,array<string,mixed>> $rows Raw rows from the form.
-	 * @return array{links:array<int,array<string,mixed>>,errors:array<int,string>}
+	 * @return array{links:array<int,array<string,mixed>>,errors:array<int,string>,changed:bool}
 	 */
 	public function save( array $rows ): array {
 		$clean  = array();
@@ -172,9 +177,95 @@ final class ADVTN_Manual {
 		$this->schedule_next_expiry();
 
 		return array(
-			'links'  => $clean,
-			'errors' => $errors,
+			'links'   => $clean,
+			'errors'  => $errors,
+			'changed' => self::served_list_changed( $previous, $clean ),
 		);
+	}
+
+	/**
+	 * Whether two stored lists would put different links in front of a visitor.
+	 *
+	 * Pure and static so the decision is testable: `tests/run.php` runs without
+	 * `$wpdb`, and the thing this decision protects — `mark_shown()` — is SQL.
+	 * The decision is the part that can be wrong, so the decision is what is
+	 * asserted on.
+	 *
+	 * WHY THIS EXISTS. A caller cannot just compare the two lists with `===`.
+	 * `validate()` mints `id` from `uniqid()` and defaults `created_at` to
+	 * `gmdate()` whenever the incoming row carries neither — and the feed
+	 * payload carries neither: `ADVTN_Manual_Feed_Parser::map_row()` emits no
+	 * `id` and no `created_at`. So two commits of a byte-identical feed produce
+	 * two lists that differ in every row, and a `===` guard would be a guard
+	 * that never fires. That is the trap this method is here to not fall into.
+	 *
+	 * WHAT IS COMPARED, and why it is these fields. Everything the feed can
+	 * actually say, in the order it said it:
+	 *
+	 * - `url`, `title`, `excerpt`, `image_url`, `site_name`, `published_at`
+	 *   are what `sync()` writes into the items table, so any of them moving
+	 *   changes what is rendered.
+	 * - `position` and list order decide placement in `ADVTN_Selector`.
+	 * - `expires_at` and `enabled` decide whether a row is served at all.
+	 *
+	 * And the two that are deliberately excluded:
+	 *
+	 * - `id` is a local handle. It is re-minted on every feed commit, it never
+	 *   reaches the rendered output (the items table is keyed on `url_hash`),
+	 *   and including it would make every comparison unequal.
+	 * - `created_at` is re-minted the same way for the same reason. It reaches
+	 *   output only as `sync()`'s fallback when `published_at` is empty, and
+	 *   treating a locally-generated timestamp as feed news would again mean
+	 *   the guard never fires.
+	 *
+	 * This is a comparison of the *served list*, not of the response bytes: a
+	 * feed that re-orders its JSON keys, changes its `version`, or re-serves
+	 * the same links reads as unchanged, which is the point.
+	 *
+	 * @param array<int,array<string,mixed>> $before List as stored before.
+	 * @param array<int,array<string,mixed>> $after  List as stored after.
+	 * @return bool
+	 */
+	public static function served_list_changed( array $before, array $after ): bool {
+		return self::comparable( $before ) !== self::comparable( $after );
+	}
+
+	/**
+	 * Reduce a stored list to the fields that decide what is served.
+	 *
+	 * `array_values()` because a list that lost its middle row keeps the outer
+	 * keys 0 and 2, and two lists that differ only in key numbering are the
+	 * same list. Every field is cast so that `0` and `'0'`, or `false` and
+	 * `''`, cannot read as a change — the two callers reach this with rows
+	 * built by `validate()` on one side and rows read back out of an option on
+	 * the other, and PHP's serializer does not promise those round-trip with
+	 * identical types.
+	 *
+	 * @param array<int,array<string,mixed>> $list Stored list.
+	 * @return array<int,array<string,string|int|bool>>
+	 */
+	private static function comparable( array $list ): array {
+		$out = array();
+
+		foreach ( array_values( $list ) as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+
+			$out[] = array(
+				'url'          => (string) ( $row['url'] ?? '' ),
+				'title'        => (string) ( $row['title'] ?? '' ),
+				'excerpt'      => (string) ( $row['excerpt'] ?? '' ),
+				'image_url'    => (string) ( $row['image_url'] ?? '' ),
+				'site_name'    => (string) ( $row['site_name'] ?? '' ),
+				'published_at' => (string) ( $row['published_at'] ?? '' ),
+				'expires_at'   => (string) ( $row['expires_at'] ?? '' ),
+				'position'     => (int) ( $row['position'] ?? 0 ),
+				'enabled'      => ! empty( $row['enabled'] ),
+			);
+		}
+
+		return $out;
 	}
 
 	/**

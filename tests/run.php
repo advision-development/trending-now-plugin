@@ -1210,6 +1210,126 @@ advtn_assert_same(
 
 $GLOBALS['advtn_test_options'] = array();
 
+/* -------------------------------------------------------------------------
+ * Whether a commit changed the served list
+ *
+ * This is the decision that stops a fetch which changed nothing from calling
+ * build_and_commit(), which stamps times_shown and sets the write-once
+ * first_shown_at. The stamp is SQL and this harness never reaches $wpdb, so
+ * the decision is extracted and the decision is what is asserted on.
+ * ---------------------------------------------------------------------- */
+
+$advtn_served_row = static function ( array $overrides = array() ): array {
+	return array_merge(
+		array(
+			'id'           => 'man_aaaaaa',
+			'url'          => 'https://example.com/a',
+			'title'        => 'A',
+			'excerpt'      => '',
+			'image_url'    => '',
+			'site_name'    => '',
+			'published_at' => '2026-09-01 00:00:00',
+			'expires_at'   => '',
+			'position'     => 0,
+			'enabled'      => true,
+			'created_at'   => '2026-09-01 00:00:00',
+		),
+		$overrides
+	);
+};
+
+$advtn_served_base = array( $advtn_served_row() );
+
+advtn_assert_same( false, ADVTN_Manual::served_list_changed( array(), array() ), 'served list: two empty lists are unchanged' );
+advtn_assert_same( true, ADVTN_Manual::served_list_changed( array(), $advtn_served_base ), 'served list: the first link is a change' );
+advtn_assert_same( true, ADVTN_Manual::served_list_changed( $advtn_served_base, array() ), 'served list: clearing the list is a change' );
+advtn_assert_same( false, ADVTN_Manual::served_list_changed( $advtn_served_base, $advtn_served_base ), 'served list: the same list twice is unchanged' );
+
+// THE ONE THAT MAKES THE GUARD REAL. ADVTN_Manual_Feed_Parser::map_row() emits
+// no id and no created_at, so validate() mints both from uniqid()/gmdate() on
+// every commit. Two commits of a byte-identical feed therefore differ in those
+// two fields in every row. A guard that compared whole rows would never fire.
+advtn_assert_same(
+	false,
+	ADVTN_Manual::served_list_changed(
+		$advtn_served_base,
+		array( $advtn_served_row( array( 'id' => 'man_zzzzzz', 'created_at' => '2026-09-02 11:22:33' ) ) )
+	),
+	'served list: a re-minted id and created_at are not a change'
+);
+
+// Everything the feed can actually say is a change, because every one of these
+// alters what a visitor is served: the six sync() writes into the items table,
+// position and order decide placement, expires_at and enabled decide whether
+// the row is served at all.
+foreach (
+	array(
+		'url'          => 'https://example.com/b',
+		'title'        => 'B',
+		'excerpt'      => 'new excerpt',
+		'image_url'    => 'https://example.com/i.png',
+		'site_name'    => 'Example',
+		'published_at' => '2026-09-02 00:00:00',
+		'expires_at'   => '2026-09-09 00:00:00',
+		'position'     => 3,
+	) as $advtn_field => $advtn_value
+) {
+	advtn_assert_same(
+		true,
+		ADVTN_Manual::served_list_changed( $advtn_served_base, array( $advtn_served_row( array( $advtn_field => $advtn_value ) ) ) ),
+		'served list: ' . $advtn_field . ' moving is a change'
+	);
+}
+
+advtn_assert_same(
+	true,
+	ADVTN_Manual::served_list_changed( $advtn_served_base, array( $advtn_served_row( array( 'enabled' => false ) ) ) ),
+	'served list: enabled moving is a change'
+);
+
+// Order is part of the served list: ADVTN_Selector splices positioned rows into
+// the order it was given, so the same two links the other way round is a
+// different list.
+$advtn_served_two = array(
+	$advtn_served_row(),
+	$advtn_served_row( array( 'url' => 'https://example.com/b', 'title' => 'B' ) ),
+);
+
+advtn_assert_same(
+	true,
+	ADVTN_Manual::served_list_changed( $advtn_served_two, array_reverse( $advtn_served_two ) ),
+	'served list: the same links reordered is a change'
+);
+advtn_assert_same( true, ADVTN_Manual::served_list_changed( $advtn_served_base, $advtn_served_two ), 'served list: an added link is a change' );
+
+// A list read back out of an option has been through PHP's serializer, which
+// does not promise int/bool round-trip against rows validate() just built. The
+// cast in comparable() is what stops '0' vs 0 reading as a change and firing a
+// rebuild on every single fetch.
+advtn_assert_same(
+	false,
+	ADVTN_Manual::served_list_changed(
+		$advtn_served_base,
+		array( $advtn_served_row( array( 'position' => '0', 'enabled' => 1 ) ) )
+	),
+	'served list: a loosely-typed position and enabled are not a change'
+);
+
+// A list that lost its middle row keeps the outer keys 0 and 2. Key numbering
+// is not part of what is served.
+$advtn_served_gappy = array(
+	0 => $advtn_served_row(),
+	2 => $advtn_served_row( array( 'url' => 'https://example.com/b', 'title' => 'B' ) ),
+);
+
+advtn_assert_same(
+	false,
+	ADVTN_Manual::served_list_changed( $advtn_served_two, $advtn_served_gappy ),
+	'served list: non-sequential keys are not a change'
+);
+
+$GLOBALS['advtn_test_options'] = array();
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );
