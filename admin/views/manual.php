@@ -334,40 +334,58 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 					<span class="advtn-badge"><?php echo esc_html( 'HTTP ' . (int) $advtn_feed_state['http_code'] ); ?></span>
 				<?php endif; ?>
 			</li>
-			<li class="description">
+			<li>
 				<?php
-				printf(
-					/* translators: 1: what asked for the last attempt. */
-					esc_html__( 'Asked for by: %1$s.', 'trending-now' ),
-					esc_html( ADVTN_Manual_Feed::trigger_words( $advtn_feed_trigger ) )
-				);
+				/*
+				 * Secondary text, and it has to render as secondary.
+				 *
+				 * `class="description"` on the `<li>` inherited nothing. WordPress
+				 * styles `p.description` and `span.description`; there is no
+				 * `li.description` rule anywhere in core, and `advtn-feed-status`
+				 * has no CSS in this plugin at all — the class appears once, at
+				 * its own use site. So these sentences came out at full body size
+				 * in full body colour, indistinguishable in weight from the
+				 * labelled facts bracketing them, which is an annotation
+				 * rendering louder than the facts it annotates. The `<span>` is
+				 * what the existing rules match, and it keeps the sentences
+				 * inside the same `<li>` as the timestamp they continue.
+				 */
 				?>
-				<?php if ( $advtn_feed_change_known ) : ?>
-					<?php if ( $advtn_feed_moved_now ) : ?>
-						<?php esc_html_e( 'This fetch changed the list.', 'trending-now' ); ?>
-					<?php elseif ( $advtn_feed_moved_named ) : ?>
-						<?php
-						printf(
-							/* translators: 1: UTC datetime. 2: what asked for the fetch that changed the list. */
-							esc_html__( 'This fetch changed nothing. The list last changed on %1$s UTC, from %2$s.', 'trending-now' ),
-							esc_html( $advtn_feed_changed_at ),
-							esc_html( ADVTN_Manual_Feed::trigger_words( $advtn_feed_moved ) )
-						);
-						?>
-					<?php else : ?>
-						<?php
-						// Dated, but by a caller that did not name itself —
-						// `wp trending-now feed-fetch` is the one that does
-						// this. The date is a fact; the cause is not, so the
-						// clause naming one is dropped rather than filled in.
-						printf(
-							/* translators: 1: UTC datetime. */
-							esc_html__( 'This fetch changed nothing. The list last changed on %1$s UTC.', 'trending-now' ),
-							esc_html( $advtn_feed_changed_at )
-						);
-						?>
+				<span class="description">
+					<?php
+					printf(
+						/* translators: 1: what asked for the last attempt. */
+						esc_html__( 'Asked for by: %1$s.', 'trending-now' ),
+						esc_html( ADVTN_Manual_Feed::trigger_words( $advtn_feed_trigger ) )
+					);
+					?>
+					<?php if ( $advtn_feed_change_known ) : ?>
+						<?php if ( $advtn_feed_moved_now ) : ?>
+							<?php esc_html_e( 'This fetch changed the list.', 'trending-now' ); ?>
+						<?php elseif ( $advtn_feed_moved_named ) : ?>
+							<?php
+							printf(
+								/* translators: 1: UTC datetime. 2: what asked for the fetch that changed the list. */
+								esc_html__( 'This fetch changed nothing. The list last changed on %1$s UTC, from %2$s.', 'trending-now' ),
+								esc_html( $advtn_feed_changed_at ),
+								esc_html( ADVTN_Manual_Feed::trigger_words( $advtn_feed_moved ) )
+							);
+							?>
+						<?php else : ?>
+							<?php
+							// Dated, but by a caller that did not name itself —
+							// `wp trending-now feed-fetch` is the one that does
+							// this. The date is a fact; the cause is not, so the
+							// clause naming one is dropped rather than filled in.
+							printf(
+								/* translators: 1: UTC datetime. */
+								esc_html__( 'This fetch changed nothing. The list last changed on %1$s UTC.', 'trending-now' ),
+								esc_html( $advtn_feed_changed_at )
+							);
+							?>
+						<?php endif; ?>
 					<?php endif; ?>
-				<?php endif; ?>
+				</span>
 			</li>
 			<li>
 				<?php esc_html_e( 'Links stored:', 'trending-now' ); ?>
