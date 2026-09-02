@@ -26,6 +26,53 @@ $advtn_feed_next    = $advtn_feed->next_due();
 $advtn_feed_ring    = isset( $advtn_feed_state['attempts'] ) && is_array( $advtn_feed_state['attempts'] ) ? $advtn_feed_state['attempts'] : array();
 $advtn_feed_summary = ADVTN_Attempts::summary( $advtn_feed_ring );
 
+// What asked for the last attempt, and what asked for the last fetch that
+// actually moved the list. Both may be '' — every fetch made before the plugin
+// learned to say so carries nothing, and `trigger_words()` renders that as "not
+// recorded" rather than inventing a cause for it.
+$advtn_feed_trigger = (string) ( $advtn_feed_state['last_trigger'] ?? '' );
+$advtn_feed_moved   = (string) ( $advtn_feed_state['last_success_trigger'] ?? '' );
+
+/*
+ * DID *THIS* FETCH MOVE THE LIST?
+ *
+ * That is the question the panel is asked, and it is not "did the cause of the
+ * last attempt differ from the cause of the last change". Those are two
+ * sources, not two events, and comparing them goes silent exactly when both are
+ * `sync` — which on a pushed site is nearly every fetch. A push that
+ * re-delivered an identical list then showed a fresh timestamp, `HTTP 200` and
+ * "a push from the feed", with nothing anywhere saying the list had not moved,
+ * and the operator concluded the push had worked.
+ *
+ * `last_change_at` and `last_attempt_at` are written from one `gmdate()`
+ * reading in one option write when a fetch moves the list, so their equality is
+ * exactly "the attempt on screen above is the one that moved it". A 304, a
+ * failure and an identical commit all leave `last_change_at` behind.
+ *
+ * An empty `last_change_at` is withheld, not reported as "changed nothing".
+ * State written before this field existed has no change time, and on those
+ * rows the plugin genuinely does not know whether the last fetch moved
+ * anything — absent is not a value and must not render as one.
+ */
+$advtn_feed_changed_at   = (string) ( $advtn_feed_state['last_change_at'] ?? '' );
+$advtn_feed_change_known = '' !== $advtn_feed_changed_at;
+$advtn_feed_moved_now    = $advtn_feed_change_known
+	&& $advtn_feed_changed_at === (string) ( $advtn_feed_state['last_attempt_at'] ?? '' );
+
+/*
+ * Whether the stored cause has words of its own.
+ *
+ * `'' !== $advtn_feed_moved` would admit any non-empty string, including one
+ * outside the closed vocabulary, and print "the list last changed from not
+ * recorded" — a sentence that asserts a cause in the same breath as admitting
+ * it has none. No current writer can store such a value; a host mu-plugin
+ * filtering the option, or a half-applied upgrade, could. `known_trigger()` is
+ * private, so the membership test available to a view is whether the value
+ * renders as anything other than the absent case.
+ */
+$advtn_feed_moved_named = ADVTN_Manual_Feed::trigger_words( $advtn_feed_moved )
+	!== ADVTN_Manual_Feed::trigger_words( '' );
+
 /**
  * Render one curated link row.
  *
@@ -220,6 +267,90 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 				<p class="description"><?php esc_html_e( 'Unticking this leaves the current links in place and editable again. Nothing disappears from the front end.', 'trending-now' ); ?></p>
 			</td>
 		</tr>
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Push credential', 'trending-now' ); ?></th>
+			<td>
+				<?php if ( '' === $settings->get_string( 'sync_key' ) ) : ?>
+					<p class="description"><?php esc_html_e( 'None yet. This site invents one the first time it fetches a feed, and the feed learns it from that request — there is nothing to copy anywhere.', 'trending-now' ); ?></p>
+				<?php else : ?>
+					<p class="description"><?php esc_html_e( 'In place. It lets the feed tell this site to re-read now instead of waiting for the timer, and it can do nothing else — not trigger an ingest, not read this site\'s sources.', 'trending-now' ); ?></p>
+				<?php endif; ?>
+				<?php
+				/*
+				 * When it was last presented, never the value.
+				 *
+				 * These are about the ROUTE, not about whether a key
+				 * exists, so they render outside the branch above —
+				 * including when the key is unset. A site that has never
+				 * fetched has no key, so every push to it is refused and
+				 * counted; that is exactly the site somebody opens this
+				 * tab to investigate, and it must not be the one case
+				 * where the refusal count is invisible.
+				 *
+				 * These three lines are the difference between "the feed
+				 * holds a stale key", "the feed has never pushed this site"
+				 * and "somebody is probing the route". All three used to
+				 * look identical here: a healthy fetch and "In place".
+				 */
+				$advtn_last_sync    = (string) ( $advtn_feed_state['last_sync_at'] ?? '' );
+				$advtn_last_refused = (string) ( $advtn_feed_state['last_sync_refused_at'] ?? '' );
+				$advtn_refused_n    = (int) ( $advtn_feed_state['sync_refused'] ?? 0 );
+				?>
+				<p class="description">
+					<?php esc_html_e( 'Last accepted push:', 'trending-now' ); ?>
+					<strong>
+						<?php
+						echo esc_html(
+							'' === $advtn_last_sync
+								? __( 'never — the feed has not pushed this site yet, or the key it holds is not this one', 'trending-now' )
+								: $advtn_last_sync . ' UTC'
+						);
+						?>
+					</strong>
+				</p>
+				<?php
+				/*
+				 * `sync_refused` and `last_sync_refused_at` answer different
+				 * questions over different windows: the count is refusals
+				 * since the last accepted push (zeroed by `record_sync()` on
+				 * acceptance, on purpose — see the comment there), the
+				 * timestamp is the most recent refusal ever. A non-zero count
+				 * is a route being refused right now — the badge earns its
+				 * `--bad` colour and the sentence names the ongoing cause. A
+				 * zero count with a timestamp is a refusal that stopped once
+				 * a real push landed — a rotated key catching up, which is
+				 * this working as designed, not a fault. Pairing that with a
+				 * `--bad` badge — or any badge headlining the word "refused"
+				 * next to a sentence that already says it — would render the
+				 * annotation louder than the fact it describes, so this state
+				 * carries no badge at all.
+				 */
+				?>
+				<?php if ( $advtn_refused_n > 0 ) : ?>
+					<p class="description">
+						<span class="advtn-badge advtn-badge--bad"><?php esc_html_e( 'refused', 'trending-now' ); ?></span>
+						<?php
+						printf(
+							/* translators: 1: refusal count, 2: UTC datetime. */
+							esc_html__( '%1$d push(es) refused, most recently %2$s UTC. A refusal means the key presented was not this site\'s current or previous one — either the feed is holding an old one, or something is probing the route.', 'trending-now' ),
+							$advtn_refused_n,
+							esc_html( $advtn_last_refused )
+						);
+						?>
+					</p>
+				<?php elseif ( '' !== $advtn_last_refused ) : ?>
+					<p class="description">
+						<?php
+						printf(
+							/* translators: %s: UTC datetime of the most recent refusal, from before the last accepted push. */
+							esc_html__( 'No pushes have been refused since the last one was accepted. The most recent refusal was %s UTC — a refusal followed by an accepted push means a rotated key caught up, which is this working as intended.', 'trending-now' ),
+							esc_html( $advtn_last_refused )
+						);
+						?>
+					</p>
+				<?php endif; ?>
+			</td>
+		</tr>
 	</table>
 
 	<?php if ( ! empty( $advtn_feed_state ) ) : ?>
@@ -230,6 +361,59 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 				<?php if ( isset( $advtn_feed_state['http_code'] ) && null !== $advtn_feed_state['http_code'] ) : ?>
 					<span class="advtn-badge"><?php echo esc_html( 'HTTP ' . (int) $advtn_feed_state['http_code'] ); ?></span>
 				<?php endif; ?>
+			</li>
+			<li>
+				<?php
+				/*
+				 * Secondary text, and it has to render as secondary.
+				 *
+				 * `class="description"` on the `<li>` inherited nothing. WordPress
+				 * styles `p.description` and `span.description`; there is no
+				 * `li.description` rule anywhere in core, and `advtn-feed-status`
+				 * has no CSS in this plugin at all — the class appears once, at
+				 * its own use site. So these sentences came out at full body size
+				 * in full body colour, indistinguishable in weight from the
+				 * labelled facts bracketing them, which is an annotation
+				 * rendering louder than the facts it annotates. The `<span>` is
+				 * what the existing rules match, and it keeps the sentences
+				 * inside the same `<li>` as the timestamp they continue.
+				 */
+				?>
+				<span class="description">
+					<?php
+					printf(
+						/* translators: 1: what asked for the last attempt. */
+						esc_html__( 'Asked for by: %1$s.', 'trending-now' ),
+						esc_html( ADVTN_Manual_Feed::trigger_words( $advtn_feed_trigger ) )
+					);
+					?>
+					<?php if ( $advtn_feed_change_known ) : ?>
+						<?php if ( $advtn_feed_moved_now ) : ?>
+							<?php esc_html_e( 'This fetch changed the list.', 'trending-now' ); ?>
+						<?php elseif ( $advtn_feed_moved_named ) : ?>
+							<?php
+							printf(
+								/* translators: 1: UTC datetime. 2: what asked for the fetch that changed the list. */
+								esc_html__( 'This fetch changed nothing. The list last changed on %1$s UTC, from %2$s.', 'trending-now' ),
+								esc_html( $advtn_feed_changed_at ),
+								esc_html( ADVTN_Manual_Feed::trigger_words( $advtn_feed_moved ) )
+							);
+							?>
+						<?php else : ?>
+							<?php
+							// Dated, but by a caller that did not name itself —
+							// `wp trending-now feed-fetch` is the one that does
+							// this. The date is a fact; the cause is not, so the
+							// clause naming one is dropped rather than filled in.
+							printf(
+								/* translators: 1: UTC datetime. */
+								esc_html__( 'This fetch changed nothing. The list last changed on %1$s UTC.', 'trending-now' ),
+								esc_html( $advtn_feed_changed_at )
+							);
+							?>
+						<?php endif; ?>
+					<?php endif; ?>
+				</span>
 			</li>
 			<li>
 				<?php esc_html_e( 'Links stored:', 'trending-now' ); ?>
@@ -255,16 +439,26 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 				</li>
 			<?php endif; ?>
 			<?php if ( $advtn_feed_summary['count'] > 0 ) : ?>
-				<li class="description">
+				<li>
 					<?php
-					printf(
-						/* translators: 1: attempt count, 2: median ms, 3: max ms. */
-						esc_html__( '%1$d recent attempts, median %2$dms, max %3$dms', 'trending-now' ),
-						(int) $advtn_feed_summary['count'],
-						(int) $advtn_feed_summary['p50'],
-						(int) $advtn_feed_summary['max']
-					);
+					// `li.description` styles nothing — see the `<span>` above,
+					// where the same class was inert for the same reason. This
+					// row was equally loud before that fix and equally wrong;
+					// it only became visible when the sentences above it started
+					// rendering as the secondary text they are, leaving the
+					// quieter fact of the two as the louder line on screen.
 					?>
+					<span class="description">
+						<?php
+						printf(
+							/* translators: 1: attempt count, 2: median ms, 3: max ms. */
+							esc_html__( '%1$d recent attempts, median %2$dms, max %3$dms', 'trending-now' ),
+							(int) $advtn_feed_summary['count'],
+							(int) $advtn_feed_summary['p50'],
+							(int) $advtn_feed_summary['max']
+						);
+						?>
+					</span>
 				</li>
 			<?php endif; ?>
 		</ul>
@@ -272,6 +466,15 @@ $advtn_render_link = static function ( array $link, int $index, int $limit, bool
 
 	<?php submit_button( __( 'Save subscription', 'trending-now' ), 'primary', 'submit', false ); ?>
 </form>
+
+<?php if ( '' !== $settings->get_string( 'sync_key' ) ) : ?>
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="advtn-inline-form" style="margin: 12px 0 20px;">
+		<?php wp_nonce_field( 'advtn_action' ); ?>
+		<input type="hidden" name="action" value="advtn_action" />
+		<button type="submit" class="button advtn-confirm" name="advtn_do" value="regenerate_sync_key"><?php esc_html_e( 'Replace push credential', 'trending-now' ); ?></button>
+		<span class="description"><?php esc_html_e( 'Replace it if you think it leaked. The old one keeps working until the feed learns the new one, which happens on this site\'s next fetch.', 'trending-now' ); ?></span>
+	</form>
+<?php endif; ?>
 
 <?php if ( $advtn_feed_active ) : ?>
 	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin: 12px 0 20px;">

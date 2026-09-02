@@ -94,6 +94,18 @@ final class ADVTN_Logger {
 	/**
 	 * Redact anything that looks like a credential and cap value length.
 	 *
+	 * The list is matched as substrings, so it has to name every credential
+	 * this plugin holds. `_key` rather than only `api_key`, because `sync_key`
+	 * matched none of the original six — `key` alone is not in the list — and
+	 * the first diagnostic somebody adds while chasing a push problem would
+	 * have written it in plaintext into `advtn_log`, which renders on the
+	 * Diagnostics tab and is served by `GET /status`. Widening to `_key` covers
+	 * `sync_key`, `sync_key_previous` and `api_key` together.
+	 *
+	 * This catches credentials passed as a *context key*. One embedded in a URL
+	 * inside the message body is not caught and has to be redacted explicitly,
+	 * as the SerpAPI provider does.
+	 *
 	 * @param array<string,mixed> $context Raw context.
 	 * @return array<string,mixed>
 	 */
@@ -103,7 +115,7 @@ final class ADVTN_Logger {
 		foreach ( $context as $key => $value ) {
 			$lower = strtolower( (string) $key );
 
-			if ( false !== strpos( $lower, 'secret' ) || false !== strpos( $lower, 'signature' ) || false !== strpos( $lower, 'token' ) || false !== strpos( $lower, 'password' ) || false !== strpos( $lower, 'api_key' ) || false !== strpos( $lower, 'apikey' ) ) {
+			if ( false !== strpos( $lower, 'secret' ) || false !== strpos( $lower, 'signature' ) || false !== strpos( $lower, 'token' ) || false !== strpos( $lower, 'password' ) || false !== strpos( $lower, '_key' ) || false !== strpos( $lower, 'apikey' ) ) {
 				$out[ $key ] = '[redacted]';
 				continue;
 			}

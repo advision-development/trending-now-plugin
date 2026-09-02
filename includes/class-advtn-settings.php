@@ -86,6 +86,19 @@ final class ADVTN_Settings {
 			// that one also governs SerpAPI fetches, billed per fetch.
 			'manual_feed_interval_hours' => 6,
 			'manual_feed_enabled'      => false,
+			// The push credential. This site invents it, keeps the plaintext,
+			// and sends it on the feed fetch it already makes — so Hawkeye
+			// learns it with no handshake and nothing is ever distributed.
+			//
+			// Plaintext rather than a hash, and the reason is not laziness:
+			// this site has to *send* the value, so it holds the plaintext
+			// regardless. A hash beside it would protect nothing while
+			// implying it did.
+			'sync_key'                 => '',
+			// Kept so a deliberate regeneration does not blind Hawkeye until
+			// this site's next fetch, up to six hours. There is no automatic
+			// rotation; see ADVTN_Sync_Key.
+			'sync_key_previous'        => '',
 			'ingest_secret'            => '',
 			'serpapi_key'              => '',
 			'github_token'             => '',
@@ -330,6 +343,20 @@ final class ADVTN_Settings {
 
 		$out['hub_secret']    = preg_replace( '/[^A-Za-z0-9]/', '', (string) ( $input['hub_secret'] ?? '' ) ) ?? '';
 		$out['ingest_secret'] = preg_replace( '/[^A-Za-z0-9]/', '', (string) ( $input['ingest_secret'] ?? '' ) ) ?? '';
+
+		/*
+		 * Never typed by a person, and therefore not repaired either. sanitize()
+		 * starts from defaults(), so a key handled nowhere here is a key reset
+		 * on every save — the credential would work until somebody pressed Save
+		 * Settings and then quietly stop.
+		 */
+		$out['sync_key'] = ADVTN_Sync_Key::is_wellformed( (string) ( $input['sync_key'] ?? '' ) )
+			? (string) $input['sync_key']
+			: '';
+
+		$out['sync_key_previous'] = ADVTN_Sync_Key::is_wellformed( (string) ( $input['sync_key_previous'] ?? '' ) )
+			? (string) $input['sync_key_previous']
+			: '';
 
 		return $out;
 	}

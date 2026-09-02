@@ -24,7 +24,10 @@ authoritative specification; read it before changing behaviour.
 
 ```bash
 composer install       # pulls woocommerce/action-scheduler into vendor/
-php tests/run.php      # dependency-free unit tests (URL normalization, HMAC)
+php tests/run.php      # 363 as of 2026-09-02. Dependency-free: URL normalization and
+                       # HMAC, plus the updater's pinning, the sync key, the trigger
+                       # fields and the served-list decision. Measure it rather than
+                       # trusting this number — it has been stale before.
 composer test          # same thing
 find . -name '*.php' -not -path './vendor/*' -print0 | xargs -0 -n1 php -l   # lint
 ```
@@ -167,6 +170,17 @@ a feed. Four rules, and each cost something to learn:
 - **The commit goes through `ADVTN_Manual::save()`.** It already validates rows, forgets
   the ones that left, syncs the items table and reschedules expiry. A second write path
   would be a second definition of a valid link, and the two would drift.
+- **The feed request follows no redirects.** `redirection => 0`, and a 3xx is reported as a
+  configuration error naming the target host. It carries the shared feed token *and* this
+  site's sync key, and WP's HTTP transport re-sends the whole header set on every hop
+  including a cross-host one, where only the initial URL was ever checked by
+  `ADVTN_URL::is_valid()`. A lapsed hostname, a shortener or a reconfigured proxy would
+  hand a third party a token that reads every feed in the network. Stripping headers per
+  hop was rejected: it depends on `http_request_args` firing inside `WP_Http`, and a
+  credential control resting on core's redirect internals fails silently. The cost is that
+  a feed URL which legitimately redirects stops fetching until it is corrected — loudly,
+  with the stored links untouched. `ADVTN_Source_Base` keeps `redirection => 3`; those
+  requests carry no bearer credential in a header.
 - **A 401 does not mean the token is wrong.** The feed answers 401 for a gated feed *and*
   for one that does not exist, deliberately — distinguishing them would let anybody map
   the network's feed names by guessing slugs. It is the one refusal this plugin cannot
@@ -191,6 +205,55 @@ know them serves what it always served, so this never needs a coordinated deploy
 - **`identity()` is pure and static, and the URL is assembled by `add_query_arg()`.** The
   parameters are the decision this plugin makes and are unit-tested; core's URL builder is
   core's job, and stubbing it would let a test pass against a stub that differs from it.
+
+**A push is a credential that can do one thing.** `POST /wp-json/advtn/v1/sync` calls
+`manual_feed()->fetch( true )` and nothing else, authenticated by `advtn_sync_key`
+in the `X-ADVTN-Sync-Key` header. Four rules:
+
+- **Not `ingest_secret`.** That one also authorizes `/ingest` and `/status`, so a
+  central store of them would trigger ingest across the network and read every site's
+  source configuration. A leaked sync key makes one site re-read its own feed.
+- **The key is generated here, on the first fetch, and never distributed.** The feed
+  learns it from the request. Rotating is this site changing it, and the previous value
+  stays valid so a deliberate replacement does not blind the feed for six hours.
+- **`expectedFeed` and `expectedVersion` are labels, never instructions.** Neither can
+  change what this site fetches — the URL is this site's own setting — and that is the
+  only reason they are safe to accept.
+- **The retry is scheduled, not slept through.** A 60-second sleep inside the request
+  exceeds a default nginx `fastcgi_read_timeout`, and the pusher reads that 504 as a
+  failed push and prunes a site that worked. One retry, queued, then the outcome stands.
+
+**Every caller of `fetch()` names itself, and three of them did not.** `TRIGGERS` is closed
+— `sync`, `cron`, `manual`, `rest` — and a name outside it is dropped rather than corrected,
+because the value lands in a log column on the far end and a token this side cannot name is a
+value nobody chose. `cron` is the reason the list exists: with only `sync` and `manual` in it,
+an absent trigger meant the timer, a signed request, or a plugin too old to say, and those are
+different answers to the one question somebody debugging a link that never appeared is asking.
+`wp trending-now feed-fetch` is the fifth caller and stays silent on purpose — the vocabulary
+is mirrored in three places that cannot import each other, so a fifth token invented on one
+side is one the other two drop, and `manual` would be a lie. The CLI reads "not recorded",
+which is true.
+
+**Three stored fields, and the third is the one the screen needs.** `last_trigger` is what
+asked for the last attempt. `last_success_trigger` is what asked for the last fetch that
+committed. `last_change_at` is when the list actually moved. The first two are not two halves
+of one fact: a forced fetch sends no ETag, so no push and no *Fetch now* can receive a 304,
+which makes "committed an identical list" the **ordinary** case on the pushed path rather than
+an edge. So the panel asks `last_change_at === last_attempt_at` — did *this* fetch move the
+list — and never compares the two triggers, which was the first version and went silent
+exactly when both were `sync`. A push that changed nothing then read as a push that worked.
+
+**One clock reading dates all three.** `commit()` holds no clock local and passes the reading
+into `commit_patch()` as an argument, so two `gmdate()` calls cannot straddle a second
+boundary and make the panel say "this fetch changed nothing" about the fetch that moved
+somebody's link. The assertion holding it compares the fields against an **injected** clock,
+not against each other — comparing them to each other passes on almost every run, which is an
+assertion that cannot fail.
+
+**An absent trigger is never rendered as a cause.** `''` means the plugin did not say, and on
+a six-hour timer every row from before this shipped says that. `trigger_words()` answers "not
+recorded" and the view drops the cause clause rather than naming one — a fabricated cause
+welded to a real timestamp is worse than a date standing alone.
 
 The token is optional: a public feed needs none, and the `Authorization` header is omitted
 entirely rather than sent empty. While subscribed, the admin's rows render disabled *and*

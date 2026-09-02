@@ -97,6 +97,46 @@ final class ADVTN_Scheduler {
 	}
 
 	/**
+	 * When the next run of a hook is due; 0 when nothing is pending.
+	 *
+	 * Asked through this class rather than with a bare `wp_next_scheduled()`,
+	 * because `schedule_single()` puts the action wherever Action Scheduler is
+	 * available and WP-Cron knows nothing about it there. A caller that queues
+	 * through the scheduler and then checks with `wp_next_scheduled()` would be
+	 * told "nothing pending" every time and would queue without limit.
+	 *
+	 * The timestamp is worth returning rather than a bool: an event that is due
+	 * but has not run — the state of every WP-Cron entry on a host whose
+	 * loopback is blocked, which the `loopback_ok` diagnostic exists because it
+	 * happens — comes back as a time in the past. That is the difference
+	 * between "a repair is coming" and "a repair is wedged", and a bool cannot
+	 * express it.
+	 *
+	 * @param string       $hook Hook name.
+	 * @param array<mixed> $args Hook args.
+	 * @return int Unix time of the next run, or 0.
+	 */
+	public function next_scheduled( string $hook, array $args = array() ): int {
+		if ( $this->has_action_scheduler() ) {
+			$next = as_next_scheduled_action( $hook, $args, self::GROUP );
+
+			// Action Scheduler answers `true` for an action that is pending or
+			// in progress but carries no scheduled date. One is queued, so this
+			// must not read as none; there is no timestamp to report, so it
+			// reports as due now.
+			if ( true === $next ) {
+				return time();
+			}
+
+			return is_int( $next ) ? $next : 0;
+		}
+
+		$next = wp_next_scheduled( $hook, $args );
+
+		return is_int( $next ) ? $next : 0;
+	}
+
+	/**
 	 * Queue a recurring action, or its WP-Cron equivalent.
 	 *
 	 * WP-Cron has no arbitrary interval, so the fallback registers a schedule
@@ -164,6 +204,11 @@ final class ADVTN_Scheduler {
 	/**
 	 * Remove every scheduled action this plugin owns.
 	 *
+	 * Every hook this plugin can queue has to be listed here, in both lists.
+	 * A hook that is missing survives deactivation as an orphan cron entry: it
+	 * fires into no listener, and a reactivation inside its window performs one
+	 * unexpected forced fetch. `HOOK_RETRY` was exactly that until fix round 1.
+	 *
 	 * @return void
 	 */
 	public function unschedule_all(): void {
@@ -173,9 +218,10 @@ final class ADVTN_Scheduler {
 			as_unschedule_all_actions( self::HOOK_SOURCE );
 			as_unschedule_all_actions( self::HOOK_FINALIZE );
 			as_unschedule_all_actions( ADVTN_Manual_Feed::HOOK );
+			as_unschedule_all_actions( ADVTN_Manual_Feed::HOOK_RETRY );
 		}
 
-		foreach ( array( self::HOOK_CYCLE, self::HOOK_SOURCE, self::HOOK_FINALIZE, ADVTN_Manual::HOOK, ADVTN_Manual_Feed::HOOK ) as $hook ) {
+		foreach ( array( self::HOOK_CYCLE, self::HOOK_SOURCE, self::HOOK_FINALIZE, ADVTN_Manual::HOOK, ADVTN_Manual_Feed::HOOK, ADVTN_Manual_Feed::HOOK_RETRY ) as $hook ) {
 			wp_clear_scheduled_hook( $hook );
 		}
 	}

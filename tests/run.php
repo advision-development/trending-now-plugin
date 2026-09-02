@@ -936,6 +936,748 @@ advtn_assert_same(
 
 /* ---------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------------
+ * ADVTN_Sync_Key
+ *
+ * The credential Hawkeye presents to say "fetch now". A leaked one buys an
+ * attacker one thing: making a site re-read the feed it re-reads every six
+ * hours anyway. That is the whole reason it is not `ingest_secret`, which also
+ * authorizes /ingest and /status.
+ * ---------------------------------------------------------------------- */
+
+$advtn_key_a = ADVTN_Sync_Key::generate();
+$advtn_key_b = ADVTN_Sync_Key::generate();
+
+advtn_assert_same( 64, strlen( $advtn_key_a ), 'sync key: 64 hex characters' );
+advtn_assert_same( 1, preg_match( '/^[0-9a-f]{64}$/', $advtn_key_a ), 'sync key: lowercase hex only' );
+advtn_assert_same( false, $advtn_key_a === $advtn_key_b, 'sync key: two generated keys differ' );
+
+advtn_assert_same( true, ADVTN_Sync_Key::is_wellformed( $advtn_key_a ), 'wellformed: a generated key' );
+advtn_assert_same( false, ADVTN_Sync_Key::is_wellformed( '' ), 'wellformed: empty is not a key' );
+advtn_assert_same( false, ADVTN_Sync_Key::is_wellformed( str_repeat( 'a', 63 ) ), 'wellformed: too short' );
+advtn_assert_same( false, ADVTN_Sync_Key::is_wellformed( str_repeat( 'a', 65 ) ), 'wellformed: too long' );
+advtn_assert_same( false, ADVTN_Sync_Key::is_wellformed( str_repeat( 'A', 64 ) ), 'wellformed: uppercase is not the stored form' );
+advtn_assert_same( false, ADVTN_Sync_Key::is_wellformed( str_repeat( 'z', 64 ) ), 'wellformed: non-hex characters' );
+
+advtn_assert_same( true, ADVTN_Sync_Key::matches( $advtn_key_a, $advtn_key_a, '' ), 'matches: the current key' );
+
+// The previous key is accepted so a deliberate regeneration does not blind
+// Hawkeye until that site's next fetch, up to six hours. There is no automatic
+// rotation; this exists for the operator who regenerated because they suspected
+// a leak, and who is the last person who should be told to wait.
+advtn_assert_same( true, ADVTN_Sync_Key::matches( $advtn_key_b, $advtn_key_a, $advtn_key_b ), 'matches: the previous key' );
+
+advtn_assert_same( false, ADVTN_Sync_Key::matches( ADVTN_Sync_Key::generate(), $advtn_key_a, $advtn_key_b ), 'matches: an unrelated key' );
+
+// Empty is the state of a site that has never fetched. Treating it as a match
+// would make every such site answerable by anybody who found the route.
+advtn_assert_same( false, ADVTN_Sync_Key::matches( '', '', '' ), 'matches: nothing presented against nothing stored' );
+advtn_assert_same( false, ADVTN_Sync_Key::matches( '', $advtn_key_a, '' ), 'matches: nothing presented' );
+advtn_assert_same( false, ADVTN_Sync_Key::matches( $advtn_key_a, '', '' ), 'matches: nothing stored' );
+advtn_assert_same( false, ADVTN_Sync_Key::matches( $advtn_key_a, '', $advtn_key_a ), 'matches: a previous key with no current one is not accepted' );
+
+// A prefix is not a match — but read what holds that. It is `is_wellformed()`'s
+// {64} quantifier, which returns before any comparison is reached, NOT
+// hash_equals(). The comment here used to credit hash_equals, and the plan
+// claimed a mutation test on it; both were wrong. `0 === strpos( $current,
+// $presented )` passes every assertion in this block, and so does `===`.
+advtn_assert_same( false, ADVTN_Sync_Key::matches( substr( $advtn_key_a, 0, 32 ), $advtn_key_a, '' ), 'matches: a prefix of the key' );
+advtn_assert_same( false, ADVTN_Sync_Key::matches( strtoupper( $advtn_key_a ), $advtn_key_a, '' ), 'matches: the key in a different case' );
+
+// The one candidate that does reach hash_equals: full length, well formed, and
+// differing only in the last character. It exercises the comparison rather than
+// the length guard. It does NOT hold the constant-time property — no assertion
+// can, which is why the docblock says that property is held by review.
+advtn_assert_same(
+	false,
+	ADVTN_Sync_Key::matches( substr( $advtn_key_a, 0, 63 ) . ( 'f' === substr( $advtn_key_a, -1 ) ? '0' : 'f' ), $advtn_key_a, '' ),
+	'matches: a full-length key differing in one character'
+);
+
+// The previous key is compared unconditionally. With no previous key stored
+// there is nothing to match, and `hash_equals( '', $presented )` says so
+// without a `&&` that would skip the call — the state of every site that has
+// never pressed Replace.
+advtn_assert_same( true, ADVTN_Sync_Key::matches( $advtn_key_a, $advtn_key_a, '' ), 'matches: the current key with no previous key stored' );
+advtn_assert_same( false, ADVTN_Sync_Key::matches( $advtn_key_b, $advtn_key_a, '' ), 'matches: an unrelated key with no previous key stored' );
+advtn_assert_same( false, ADVTN_Sync_Key::matches( $advtn_key_a, $advtn_key_b, 'not a key' ), 'matches: a malformed previous key is not a match' );
+
+/* -------------------------------------------------------------------------
+ * The sync key survives a settings save
+ *
+ * sanitize() starts from defaults() and assigns only the keys it knows. A key
+ * it does not handle is reset on every save — so this is not a nicety, it is
+ * the difference between a credential and a credential that works until
+ * somebody presses Save Settings.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['advtn_test_options'] = array();
+
+$advtn_stored_key = ADVTN_Sync_Key::generate();
+$advtn_old_key    = ADVTN_Sync_Key::generate();
+
+advtn_assert_same( '', ADVTN_Settings::defaults()['sync_key'], 'settings: a fresh install has no sync key' );
+advtn_assert_same( '', ADVTN_Settings::defaults()['sync_key_previous'], 'settings: a fresh install has no previous key' );
+
+$advtn_clean = ADVTN_Settings::sanitize(
+	array(
+		'sync_key'          => $advtn_stored_key,
+		'sync_key_previous' => $advtn_old_key,
+	)
+);
+
+advtn_assert_same( $advtn_stored_key, $advtn_clean['sync_key'], 'sanitize: a well-formed key is kept' );
+advtn_assert_same( $advtn_old_key, $advtn_clean['sync_key_previous'], 'sanitize: a well-formed previous key is kept' );
+
+// The value is never typed by a person, so anything that is not the stored
+// shape is a value that arrived by a route nobody designed. Dropped rather
+// than repaired.
+advtn_assert_same( '', ADVTN_Settings::sanitize( array( 'sync_key' => 'not-a-key' ) )['sync_key'], 'sanitize: a malformed key is dropped, not repaired' );
+advtn_assert_same( '', ADVTN_Settings::sanitize( array( 'sync_key' => strtoupper( $advtn_stored_key ) ) )['sync_key'], 'sanitize: an uppercase key is not the stored form' );
+advtn_assert_same( '', ADVTN_Settings::sanitize( array() )['sync_key'], 'sanitize: absent means empty' );
+
+// The regression this task exists for. Saving an unrelated field must not
+// clear the credential.
+$advtn_settings = new ADVTN_Settings();
+$advtn_settings->update( array( 'sync_key' => $advtn_stored_key ) );
+$advtn_settings->update( array( 'heading_text' => 'Something Else' ) );
+
+advtn_assert_same(
+	$advtn_stored_key,
+	$advtn_settings->get_string( 'sync_key' ),
+	'settings: saving an unrelated field leaves the sync key alone'
+);
+advtn_assert_same( 'Something Else', $advtn_settings->get_string( 'heading_text' ), 'settings: the unrelated field did change' );
+
+$GLOBALS['advtn_test_options'] = array();
+
+/* -------------------------------------------------------------------------
+ * identity() gains a trigger
+ *
+ * A claim the site makes about itself, which this project normally refuses to
+ * record — admitted here because it is a label on a log row rather than an
+ * authorization, and there is no other way to know from the log side why a
+ * fetch happened. The job document is the authoritative record of "we pushed";
+ * where the two disagree, the job document is right.
+ * ---------------------------------------------------------------------- */
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0' ),
+	'identity: no trigger means no trigger parameter'
+);
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0', 'trigger' => 'sync' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', 'sync' ),
+	'identity: a trigger is appended after site and v'
+);
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', '   ' ),
+	'identity: a whitespace trigger is nothing, not a blank parameter'
+);
+
+// A closed vocabulary, and refused rather than sanitised. The value reaches a
+// log column on the far end; anything this side cannot name is a value nobody
+// chose.
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', 'something-else' ),
+	'identity: an unknown trigger is dropped, not passed through'
+);
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0', 'trigger' => 'manual' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', 'manual' ),
+	'identity: manual is a known trigger'
+);
+
+// The existing contract, restated so a change to the signature cannot lose it.
+advtn_assert_same(
+	array(),
+	ADVTN_Manual_Feed::identity( '', '', 'sync' ),
+	'identity: a trigger alone says nothing about which site this is'
+);
+
+/* -------------------------------------------------------------------------
+ * The parser reads which feed answered
+ *
+ * Hawkeye compares this against the feed it pushed for. A site that moved from
+ * feed A to feed B is still in A's roster until something prunes it, and
+ * pushing it would record `ok` for a site that did not refresh A — a false
+ * success, which is the exact shape of failure this project has already paid
+ * for once.
+ * ---------------------------------------------------------------------- */
+
+$advtn_feed_body = wp_json_encode(
+	array(
+		'feed'  => array( 'slug' => 'pbn-sample', 'name' => 'PBN Sample', 'version' => 41 ),
+		'items' => array(
+			array( 'url' => 'https://example.com/a', 'title' => 'A' ),
+		),
+	)
+);
+
+$advtn_parsed = ADVTN_Manual_Feed_Parser::parse( (string) $advtn_feed_body );
+
+advtn_assert_same( true, $advtn_parsed['ok'], 'parse: a well-formed payload' );
+advtn_assert_same( 'pbn-sample', $advtn_parsed['slug'], 'parse: the slug is read out of the feed object' );
+advtn_assert_same( '41', $advtn_parsed['version'], 'parse: the version is still read' );
+
+// Absent rather than guessed. A feed serving no slug is one this plugin cannot
+// compare, and inventing one from the request would make every comparison
+// agree with itself.
+$advtn_no_slug = ADVTN_Manual_Feed_Parser::parse(
+	(string) wp_json_encode( array( 'feed' => array( 'version' => 7 ), 'items' => array() ) )
+);
+
+advtn_assert_same( '', $advtn_no_slug['slug'], 'parse: a payload with no slug reports none' );
+advtn_assert_same( true, $advtn_no_slug['ok'], 'parse: a missing slug is not a parse failure' );
+
+// A non-scalar slug is not a slug. An array here would become "Array" under a
+// string cast and compare equal to nothing, which is right by accident rather
+// than on purpose.
+$advtn_odd_slug = ADVTN_Manual_Feed_Parser::parse(
+	(string) wp_json_encode( array( 'feed' => array( 'slug' => array( 'x' ) ), 'items' => array() ) )
+);
+
+advtn_assert_same( '', $advtn_odd_slug['slug'], 'parse: a non-scalar slug reports none' );
+
+// The failure shape carries the key too, so every caller can read it without
+// checking which branch it came from.
+$advtn_broken = ADVTN_Manual_Feed_Parser::parse( 'not json at all' );
+
+advtn_assert_same( false, $advtn_broken['ok'], 'parse: garbage is not a feed' );
+advtn_assert_same( '', $advtn_broken['slug'], 'parse: a failure still carries a slug key' );
+
+/* -------------------------------------------------------------------------
+ * ADVTN_Manual_Feed::retry_needed()
+ *
+ * FEED_CACHE_MS on the far end is 60 seconds, per instance, with no
+ * invalidation available — the callable that saves runs in a different
+ * instance from the one serving, so nothing in the writer's process reaches
+ * the reader's memory. The TTL is the invalidation.
+ *
+ * So a push fired right after a save hands this site the previous version and
+ * its ETag, and the button reports success having changed nothing. The retry
+ * is what closes that window.
+ * ---------------------------------------------------------------------- */
+
+advtn_assert_same( true, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '40', '41' ), 'retry: the slug matches and the version arrived older' );
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '41', '41' ), 'retry: the expected version arrived' );
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '42', '41' ), 'retry: a newer version than expected is not a reason to fetch again' );
+
+// A stale roster row must not trigger a retry against another feed's version
+// numbers. Two feeds' version counters are unrelated integers, so comparing
+// them is comparing nothing.
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'other-feed', 'pbn-sample', '3', '41' ), 'retry: the slug differs, so the version is not compared' );
+
+// No expectation is not an expectation of zero.
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '40', '' ), 'retry: no expected version means nothing to be behind' );
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', '', '40', '41' ), 'retry: no expected feed means no comparison to make' );
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( '', 'pbn-sample', '40', '41' ), 'retry: a feed that answered no slug cannot be compared' );
+
+// Versions are integers on the wire. A non-numeric value is not a version, and
+// treating it as 0 would make every push retry.
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', 'abc', '41' ), 'retry: a non-numeric answered version is not behind' );
+advtn_assert_same( false, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '40', 'abc' ), 'retry: a non-numeric expectation is no expectation' );
+
+// String comparison would say '9' > '41'. This has to be numeric.
+advtn_assert_same( true, ADVTN_Manual_Feed::retry_needed( 'pbn-sample', 'pbn-sample', '9', '41' ), 'retry: versions compare as numbers, not as strings' );
+
+/* -------------------------------------------------------------------------
+ * Regenerating the sync key
+ *
+ * Not automatic and not on a schedule. The worst an attacker does with a
+ * captured key is make one site re-read its own feed, which it does every six
+ * hours anyway — so automatic rotation buys almost nothing and costs a real
+ * fragility: the far end's roster write is best-effort, so any dropped write
+ * would leave it holding a key the site no longer accepts.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['advtn_test_options'] = array();
+
+$advtn_feed_settings = new ADVTN_Settings();
+$advtn_first_key     = ADVTN_Sync_Key::generate();
+$advtn_feed_settings->update( array( 'sync_key' => $advtn_first_key ) );
+
+$advtn_feed = new ADVTN_Manual_Feed( $advtn_feed_settings, new ADVTN_Manual( $advtn_feed_settings, new ADVTN_Repository() ) );
+
+advtn_assert_same( true, $advtn_feed->regenerate_sync_key(), 'regenerate: reports success' );
+
+$advtn_second_key = $advtn_feed_settings->get_string( 'sync_key' );
+
+advtn_assert_same( false, $advtn_second_key === $advtn_first_key, 'regenerate: the current key changed' );
+advtn_assert_same( true, ADVTN_Sync_Key::is_wellformed( $advtn_second_key ), 'regenerate: the new key is well formed' );
+
+// The old one is kept so the far end, which learns keys only by being called,
+// is not blind until this site's next fetch — up to six hours, and the person
+// who just regenerated because they suspected a leak is the last one who
+// should be told to wait.
+advtn_assert_same( $advtn_first_key, $advtn_feed_settings->get_string( 'sync_key_previous' ), 'regenerate: the old key becomes the previous one' );
+advtn_assert_same( true, ADVTN_Sync_Key::matches( $advtn_first_key, $advtn_second_key, $advtn_feed_settings->get_string( 'sync_key_previous' ) ), 'regenerate: the old key still matches' );
+
+// Two values, never three. A second regeneration drops the oldest.
+$advtn_feed->regenerate_sync_key();
+
+advtn_assert_same( $advtn_second_key, $advtn_feed_settings->get_string( 'sync_key_previous' ), 'regenerate: the second regeneration drops the oldest key' );
+advtn_assert_same(
+	false,
+	ADVTN_Sync_Key::matches( $advtn_first_key, $advtn_feed_settings->get_string( 'sync_key' ), $advtn_feed_settings->get_string( 'sync_key_previous' ) ),
+	'regenerate: the key from two regenerations ago no longer matches'
+);
+
+$GLOBALS['advtn_test_options'] = array();
+
+/* -------------------------------------------------------------------------
+ * A redirect on the feed request is refused, not followed
+ *
+ * The request carries the shared feed token and this site's sync key, and
+ * WordPress re-sends the whole header set on every hop including a cross-host
+ * one. `redirection => 0` is what stops that; this is the classification that
+ * turns the resulting 3xx into a message naming the real problem.
+ * ---------------------------------------------------------------------- */
+
+foreach ( array( 300, 301, 302, 303, 307, 308, 399 ) as $advtn_redirect_code ) {
+	advtn_assert_same( true, ADVTN_Manual_Feed::is_redirect( $advtn_redirect_code ), 'redirect: HTTP ' . $advtn_redirect_code . ' is a refused redirect' );
+}
+
+// 304 is in the 3xx range and is NOT a redirect: it is the feed saying the
+// version already held is current, and it is a success. Classifying it here
+// would turn every unmodified scheduled fetch into a reported configuration
+// error — on every subscribed site, four times a day.
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( 304 ), 'redirect: 304 is not a redirect, it is an unmodified feed' );
+
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( 200 ), 'redirect: 200 is not a redirect' );
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( 299 ), 'redirect: 299 is below the range' );
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( 400 ), 'redirect: 400 is above the range' );
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( 401 ), 'redirect: a gated feed is not a redirect' );
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( 500 ), 'redirect: a server error is not a redirect' );
+
+// A transport error leaves no code at all. It has its own failure path and must
+// not be reported as a redirect.
+advtn_assert_same( false, ADVTN_Manual_Feed::is_redirect( null ), 'redirect: no status code is not a redirect' );
+
+/* -------------------------------------------------------------------------
+ * The log redacts every credential this plugin holds
+ *
+ * The scrub list is matched as substrings, and `sync_key` matched none of the
+ * original six — `api_key` was there, plain `key` was not. Nothing logged it at
+ * the time, which is exactly the shape of trap this covers: the guard has to
+ * hold before somebody adds the diagnostic, not after.
+ * ---------------------------------------------------------------------- */
+
+$GLOBALS['advtn_test_options'] = array();
+
+ADVTN_Logger::clear();
+ADVTN_Logger::log(
+	'info',
+	'settings saved',
+	array(
+		'ingest_secret'      => 'secret-value',
+		'manual_feed_token'  => 'token-value',
+		'serpapi_key'        => 'serpapi-value',
+		'sync_key'           => 'sync-value',
+		'sync_key_previous'  => 'previous-value',
+		'signature'          => 'signature-value',
+		'password'           => 'password-value',
+		'apikey'             => 'apikey-value',
+		'manual_feed_url'    => 'https://feed.example/pbn-sample',
+	)
+);
+
+$advtn_log_context = ADVTN_Logger::entries()[0]['context'];
+
+foreach (
+	array( 'ingest_secret', 'manual_feed_token', 'serpapi_key', 'sync_key', 'sync_key_previous', 'signature', 'password', 'apikey' )
+	as $advtn_cred
+) {
+	advtn_assert_same( '[redacted]', $advtn_log_context[ $advtn_cred ], 'log scrub: ' . $advtn_cred . ' is redacted' );
+}
+
+// Not everything is a credential. Redacting the feed URL would take away the
+// one field an operator needs to see to diagnose a wrong slug — the failure
+// mode the feed answers 401 for and cannot name.
+advtn_assert_same( 'https://feed.example/pbn-sample', $advtn_log_context['manual_feed_url'], 'log scrub: an ordinary setting is left alone' );
+
+ADVTN_Logger::clear();
+$GLOBALS['advtn_test_options'] = array();
+
+/* -------------------------------------------------------------------------
+ * Throttling the log line for a refused push
+ *
+ * /sync is internet-facing and can be refused 30 times per five minutes. The
+ * HMAC routes log every refusal; mirroring that here would let an
+ * unauthenticated caller evict the whole 200-row log ring, which would destroy
+ * the record the line was added to provide. One line per burst instead, with
+ * the magnitude kept in a counter that cannot be flooded.
+ * ---------------------------------------------------------------------- */
+
+$advtn_burst_now = strtotime( '2026-09-01 12:00:00 UTC' );
+
+advtn_assert_same( true, ADVTN_Manual_Feed::refusal_is_new_burst( '', $advtn_burst_now, HOUR_IN_SECONDS ), 'refusal burst: the first refusal ever is logged' );
+advtn_assert_same( true, ADVTN_Manual_Feed::refusal_is_new_burst( 'not a date', $advtn_burst_now, HOUR_IN_SECONDS ), 'refusal burst: an unreadable timestamp is logged' );
+advtn_assert_same( false, ADVTN_Manual_Feed::refusal_is_new_burst( '2026-09-01 11:59:00', $advtn_burst_now, HOUR_IN_SECONDS ), 'refusal burst: a refusal a minute after the last is not logged again' );
+advtn_assert_same( true, ADVTN_Manual_Feed::refusal_is_new_burst( '2026-09-01 11:00:00', $advtn_burst_now, HOUR_IN_SECONDS ), 'refusal burst: exactly one interval later opens a new burst' );
+advtn_assert_same( true, ADVTN_Manual_Feed::refusal_is_new_burst( '2026-09-01 09:00:00', $advtn_burst_now, HOUR_IN_SECONDS ), 'refusal burst: long after the last opens a new burst' );
+
+// The stored timestamp is UTC, like every other datetime in this plugin. Read
+// as local time on a host west of UTC it would look like the future, and
+// `$now - $last` would go negative — a refusal that never opens a burst and so
+// never logs at all.
+advtn_assert_same( false, ADVTN_Manual_Feed::refusal_is_new_burst( '2026-09-01 12:00:00', $advtn_burst_now, HOUR_IN_SECONDS ), 'refusal burst: a refusal in the same second is not a new burst' );
+
+/* -------------------------------------------------------------------------
+ * Whether a commit changed the served list
+ *
+ * This is the decision that stops a fetch which changed nothing from calling
+ * build_and_commit(), which stamps times_shown and sets the write-once
+ * first_shown_at. The stamp is SQL and this harness never reaches $wpdb, so
+ * the decision is extracted and the decision is what is asserted on.
+ * ---------------------------------------------------------------------- */
+
+$advtn_served_row = static function ( array $overrides = array() ): array {
+	return array_merge(
+		array(
+			'id'           => 'man_aaaaaa',
+			'url'          => 'https://example.com/a',
+			'title'        => 'A',
+			'excerpt'      => '',
+			'image_url'    => '',
+			'site_name'    => '',
+			'published_at' => '2026-09-01 00:00:00',
+			'expires_at'   => '',
+			'position'     => 0,
+			'enabled'      => true,
+			'created_at'   => '2026-09-01 00:00:00',
+		),
+		$overrides
+	);
+};
+
+$advtn_served_base = array( $advtn_served_row() );
+
+advtn_assert_same( false, ADVTN_Manual::served_list_changed( array(), array() ), 'served list: two empty lists are unchanged' );
+advtn_assert_same( true, ADVTN_Manual::served_list_changed( array(), $advtn_served_base ), 'served list: the first link is a change' );
+advtn_assert_same( true, ADVTN_Manual::served_list_changed( $advtn_served_base, array() ), 'served list: clearing the list is a change' );
+advtn_assert_same( false, ADVTN_Manual::served_list_changed( $advtn_served_base, $advtn_served_base ), 'served list: the same list twice is unchanged' );
+
+// THE ONE THAT MAKES THE GUARD REAL. ADVTN_Manual_Feed_Parser::map_row() emits
+// no id and no created_at, so validate() mints both from uniqid()/gmdate() on
+// every commit. Two commits of a byte-identical feed therefore differ in those
+// two fields in every row. A guard that compared whole rows would never fire.
+advtn_assert_same(
+	false,
+	ADVTN_Manual::served_list_changed(
+		$advtn_served_base,
+		array( $advtn_served_row( array( 'id' => 'man_zzzzzz', 'created_at' => '2026-09-02 11:22:33' ) ) )
+	),
+	'served list: a re-minted id and created_at are not a change'
+);
+
+// Everything the feed can actually say is a change, because every one of these
+// alters what a visitor is served: the six sync() writes into the items table,
+// position and order decide placement, expires_at and enabled decide whether
+// the row is served at all.
+foreach (
+	array(
+		'url'          => 'https://example.com/b',
+		'title'        => 'B',
+		'excerpt'      => 'new excerpt',
+		'image_url'    => 'https://example.com/i.png',
+		'site_name'    => 'Example',
+		'published_at' => '2026-09-02 00:00:00',
+		'expires_at'   => '2026-09-09 00:00:00',
+		'position'     => 3,
+	) as $advtn_field => $advtn_value
+) {
+	advtn_assert_same(
+		true,
+		ADVTN_Manual::served_list_changed( $advtn_served_base, array( $advtn_served_row( array( $advtn_field => $advtn_value ) ) ) ),
+		'served list: ' . $advtn_field . ' moving is a change'
+	);
+}
+
+advtn_assert_same(
+	true,
+	ADVTN_Manual::served_list_changed( $advtn_served_base, array( $advtn_served_row( array( 'enabled' => false ) ) ) ),
+	'served list: enabled moving is a change'
+);
+
+// Order is part of the served list: ADVTN_Selector splices positioned rows into
+// the order it was given, so the same two links the other way round is a
+// different list.
+$advtn_served_two = array(
+	$advtn_served_row(),
+	$advtn_served_row( array( 'url' => 'https://example.com/b', 'title' => 'B' ) ),
+);
+
+advtn_assert_same(
+	true,
+	ADVTN_Manual::served_list_changed( $advtn_served_two, array_reverse( $advtn_served_two ) ),
+	'served list: the same links reordered is a change'
+);
+advtn_assert_same( true, ADVTN_Manual::served_list_changed( $advtn_served_base, $advtn_served_two ), 'served list: an added link is a change' );
+
+// A list read back out of an option has been through PHP's serializer, which
+// does not promise int/bool round-trip against rows validate() just built. The
+// cast in comparable() is what stops '0' vs 0 reading as a change and firing a
+// rebuild on every single fetch.
+advtn_assert_same(
+	false,
+	ADVTN_Manual::served_list_changed(
+		$advtn_served_base,
+		array( $advtn_served_row( array( 'position' => '0', 'enabled' => 1 ) ) )
+	),
+	'served list: a loosely-typed position and enabled are not a change'
+);
+
+// A list that lost its middle row keeps the outer keys 0 and 2. Key numbering
+// is not part of what is served.
+$advtn_served_gappy = array(
+	0 => $advtn_served_row(),
+	2 => $advtn_served_row( array( 'url' => 'https://example.com/b', 'title' => 'B' ) ),
+);
+
+advtn_assert_same(
+	false,
+	ADVTN_Manual::served_list_changed( $advtn_served_two, $advtn_served_gappy ),
+	'served list: non-sequential keys are not a change'
+);
+
+$GLOBALS['advtn_test_options'] = array();
+
+/* -------------------------------------------------------------------------
+ * Which clock asked for this fetch
+ *
+ * Four callers, and until now three of them said nothing. The cron is the one
+ * that matters: "the last fetch was a push" and "the last fetch was the timer"
+ * are the two answers somebody debugging a link that did not appear actually
+ * needs, and an empty trigger could mean either.
+ * ---------------------------------------------------------------------- */
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0', 'trigger' => 'cron' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', 'cron' ),
+	'identity: cron is a known trigger'
+);
+
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0', 'trigger' => 'rest' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', 'rest' ),
+	'identity: rest is a known trigger'
+);
+
+// The vocabulary stays closed. The value lands in a log column on the far end,
+// so a name this side cannot produce is a value nobody chose.
+advtn_assert_same(
+	array( 'site' => 'https://mysite.test', 'v' => '1.4.0' ),
+	ADVTN_Manual_Feed::identity( 'https://mysite.test', '1.4.0', 'cronjob' ),
+	'identity: a near-miss trigger is dropped, not corrected'
+);
+
+/*
+ * The words a person reads. Never the token: printing `cron` prints the
+ * mechanism, and the whole point of this field is that somebody who is not
+ * reading the source can tell a push from a timer.
+ */
+advtn_assert_same( 'a push from the feed', ADVTN_Manual_Feed::trigger_words( 'sync' ), 'words: sync' );
+advtn_assert_same( 'the six-hourly timer', ADVTN_Manual_Feed::trigger_words( 'cron' ), 'words: cron' );
+advtn_assert_same( 'somebody pressing Fetch now', ADVTN_Manual_Feed::trigger_words( 'manual' ), 'words: manual' );
+advtn_assert_same( 'a signed request to this site', ADVTN_Manual_Feed::trigger_words( 'rest' ), 'words: rest' );
+
+// Absent is not a value. Every fetch made before this shipped says nothing, and
+// on a six-hour timer those are most of a first day — so this reads as "did not
+// say" rather than as a guess, for the same reason the Sync tab stopped
+// blaming old plugins for three different things in 2f22ad5.
+advtn_assert_same( 'not recorded', ADVTN_Manual_Feed::trigger_words( '' ), 'words: absent says it did not say' );
+advtn_assert_same( 'not recorded', ADVTN_Manual_Feed::trigger_words( 'whatever' ), 'words: an unknown token is not invented into a cause' );
+
+/* -------------------------------------------------------------------------
+ * Whether a fetch moved the list, and what caused the fetch that did
+ *
+ * These are the two gates the trigger fields rest on, and until now nothing
+ * held either: both mutations below passed 352 of 352. `commit()` needs $wpdb,
+ * WordPress and HTTP, so the decision was extracted onto `trigger_fields()` —
+ * the same move `ADVTN_Manual::served_list_changed()` made for the exposure-
+ * floor Critical, and for the same reason. The decision is the part that can be
+ * wrong, so the decision is what is asserted on.
+ * ---------------------------------------------------------------------- */
+
+$advtn_changed_at = '2026-09-02 10:04:17';
+
+/*
+ * GATE ONE: only a fetch that moved the list records a change.
+ *
+ * Mutating this — hoisting `last_success_trigger` and `last_change_at` out of
+ * the `if ( $changed )` — is the likeliest future regression, because a reader
+ * tidying `commit()` sees a conditional array and flattens it. It would put
+ * "the list last changed from a push, just now" on screen for the push that
+ * re-delivered the same list that was missing the operator's link.
+ */
+advtn_assert_same(
+	array( 'last_trigger' => 'cron' ),
+	ADVTN_Manual_Feed::trigger_fields( false, 'cron', $advtn_changed_at ),
+	'trigger fields: an unchanged fetch records the attempt and no change'
+);
+
+advtn_assert_same(
+	false,
+	array_key_exists( 'last_change_at', ADVTN_Manual_Feed::trigger_fields( false, 'sync', $advtn_changed_at ) ),
+	'trigger fields: an unchanged fetch keeps no change time even when handed one'
+);
+
+advtn_assert_same(
+	array(
+		'last_trigger'         => 'sync',
+		'last_success_trigger' => 'sync',
+		'last_change_at'       => $advtn_changed_at,
+	),
+	ADVTN_Manual_Feed::trigger_fields( true, 'sync', $advtn_changed_at ),
+	'trigger fields: a fetch that moved the list records the cause and dates it'
+);
+
+// The screen asks "did *this* fetch move the list", and answers it by comparing
+// `last_change_at` with `last_attempt_at`. That only works while the change time
+// is the attempt's own reading, handed in rather than read again in here.
+advtn_assert_same(
+	$advtn_changed_at,
+	ADVTN_Manual_Feed::trigger_fields( true, 'cron', $advtn_changed_at )['last_change_at'],
+	'trigger fields: the change is dated by the attempt it belongs to'
+);
+
+/*
+ * GATE TWO: the stored trigger is filtered, not trusted.
+ *
+ * This used to sit in `fetch()`, one line no test in this repository could
+ * reach; deleting it left the wire filtered and the store holding whatever a
+ * caller passed. It is now on the boundary that stores the value.
+ */
+advtn_assert_same(
+	array(
+		'last_trigger'         => '',
+		'last_success_trigger' => '',
+		'last_change_at'       => $advtn_changed_at,
+	),
+	ADVTN_Manual_Feed::trigger_fields( true, 'cronjob', $advtn_changed_at ),
+	'trigger fields: a near-miss trigger is dropped from the state, not corrected'
+);
+
+advtn_assert_same(
+	array( 'last_trigger' => 'manual' ),
+	ADVTN_Manual_Feed::trigger_fields( false, ' manual ', '' ),
+	'trigger fields: a padded trigger is trimmed before it is stored'
+);
+
+/*
+ * A caller that says nothing overwrites the stored cause.
+ *
+ * Decided rather than inherited. The feed side's roster row has the opposite
+ * rule — an empty value never overwrites a stored one — because there the field
+ * is a property of a site across many fetches and an empty value is an old
+ * plugin that cannot say. Here `last_success_trigger` and `last_change_at` are
+ * one event's cause and date. Keeping `cron` when a silent
+ * `wp trending-now feed-fetch` moved the list would print a fabricated cause
+ * beside a real timestamp; '' prints as withheld.
+ */
+advtn_assert_same(
+	array(
+		'last_trigger'         => '',
+		'last_success_trigger' => '',
+		'last_change_at'       => $advtn_changed_at,
+	),
+	ADVTN_Manual_Feed::trigger_fields( true, '', $advtn_changed_at ),
+	'trigger fields: a silent caller overwrites the stored cause rather than leaving a stale one'
+);
+
+/* -------------------------------------------------------------------------
+ * One clock reading per attempt
+ *
+ * The panel's whole predicate is `last_change_at === last_attempt_at`, which is
+ * a property of the WIRING and not of either field. Holding it on the callee
+ * side only left it open one level up: inlining `gmdate( 'Y-m-d H:i:s' )` at the
+ * call site reads as a harmless "same clock" tidy-up, passed 359 of 359, and
+ * would tell an operator that the fetch which moved their link changed nothing
+ * whenever the two readings straddled a second. `commit()` cannot be reached
+ * from here, so the wiring is `commit_patch()` and it is asserted rather than
+ * described.
+ * ---------------------------------------------------------------------- */
+
+$advtn_commit_facts = array(
+	'http_code'  => 200,
+	'item_count' => 7,
+	'skipped'    => 1,
+	'feed'       => 'trending-uk',
+	'version'    => '2026-09-02T10:00:00Z',
+	'etag'       => 'W/"abc"',
+);
+
+$advtn_commit_moved = ADVTN_Manual_Feed::commit_patch( true, 'sync', $advtn_changed_at, $advtn_commit_facts );
+
+// THE INVARIANT. Every field this attempt dates is dated by the reading handed
+// in, so a second `gmdate()` anywhere in the wiring — at the call site or inside
+// it — produces a live timestamp here instead of the fixture and fails this.
+advtn_assert_same(
+	array( $advtn_changed_at, $advtn_changed_at, $advtn_changed_at ),
+	array(
+		$advtn_commit_moved['last_attempt_at'],
+		$advtn_commit_moved['last_success_at'],
+		$advtn_commit_moved['last_change_at'],
+	),
+	'commit patch: one clock reading dates the attempt, the commit and the change'
+);
+
+advtn_assert_same(
+	array(
+		'http_code'            => 200,
+		'item_count'           => 7,
+		'skipped'              => 1,
+		'feed'                 => 'trending-uk',
+		'version'              => '2026-09-02T10:00:00Z',
+		'etag'                 => 'W/"abc"',
+		'last_attempt_at'      => $advtn_changed_at,
+		'last_success_at'      => $advtn_changed_at,
+		'error'                => '',
+		'last_trigger'         => 'sync',
+		'last_success_trigger' => 'sync',
+		'last_change_at'       => $advtn_changed_at,
+	),
+	$advtn_commit_moved,
+	'commit patch: a fetch that moved the list carries every field and clears the error'
+);
+
+// The asymmetry, at the level that writes it: an identical commit is still a
+// commit — `last_success_at` advances — and still not a change.
+$advtn_commit_same = ADVTN_Manual_Feed::commit_patch( false, 'sync', $advtn_changed_at, $advtn_commit_facts );
+
+advtn_assert_same(
+	array( $advtn_changed_at, false, false ),
+	array(
+		$advtn_commit_same['last_success_at'],
+		array_key_exists( 'last_change_at', $advtn_commit_same ),
+		array_key_exists( 'last_success_trigger', $advtn_commit_same ),
+	),
+	'commit patch: an unchanged fetch is dated as a commit and not as a change'
+);
+
+// Ordering, not decoration: the dated fields are merged after the facts, so a
+// fact arriving under one of their names cannot displace the clock the patch is
+// dated by. Nothing sends one today.
+advtn_assert_same(
+	$advtn_changed_at,
+	ADVTN_Manual_Feed::commit_patch(
+		true,
+		'cron',
+		$advtn_changed_at,
+		array( 'last_attempt_at' => '1999-01-01 00:00:00', 'error' => 'stale' )
+	)['last_attempt_at'],
+	'commit patch: a fact cannot displace the clock the patch is dated by'
+);
+
+/* ---------------------------------------------------------------------- */
+
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );
 
 exit( $advtn_failed > 0 ? 1 : 0 );

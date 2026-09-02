@@ -18,6 +18,23 @@ final class ADVTN_REST {
 	public const HUB_CACHE_MAX    = 500;
 
 	/**
+	 * How long to wait before the one retry, in seconds.
+	 *
+	 * Sixty, matching the far end's serving cache, plus nothing: the cache TTL
+	 * is the invalidation, so a fetch after it has elapsed reads Firestore.
+	 */
+	private const SYNC_RETRY_DELAY = 60;
+
+	/**
+	 * Seconds between log lines for refused pushes.
+	 *
+	 * An hour, not the rate-limit window. The log is a 200-row ring shared with
+	 * everything else this plugin records, and one line per five minutes under
+	 * sustained probing would fill it in under a day.
+	 */
+	private const SYNC_REFUSAL_LOG_INTERVAL = HOUR_IN_SECONDS;
+
+	/**
 	 * Settings service.
 	 *
 	 * @var ADVTN_Settings
@@ -43,7 +60,7 @@ final class ADVTN_REST {
 	}
 
 	/**
-	 * Register all three routes.
+	 * Register all five routes.
 	 *
 	 * @return void
 	 */
@@ -64,7 +81,7 @@ final class ADVTN_REST {
 					'source' => array(
 						'type'              => 'string',
 						'required'          => false,
-						'sanitize_callback' => static fn( $v ) => preg_replace( '/[^a-z0-9_]/', '', (string) $v ),
+						'sanitize_callback' => static fn( $v ) => (string) preg_replace( '/[^a-z0-9_]/', '', (string) $v ),
 					),
 				),
 			)
@@ -82,6 +99,50 @@ final class ADVTN_REST {
 						'type'     => 'boolean',
 						'default'  => true,
 						'required' => false,
+					),
+				),
+			)
+		);
+
+		/*
+		 * A new route with its own credential, and not an argument to
+		 * /feed-fetch.
+		 *
+		 * /feed-fetch is HMAC-signed with ingest_secret, and that secret also
+		 * authorizes /ingest and /status. The far end holding one per site would
+		 * be a store of credentials that can trigger ingest across the whole
+		 * network and read each site's source configuration. This route does one
+		 * thing and holds a credential that can do only that thing.
+		 */
+		register_rest_route(
+			self::NAMESPACE_V1,
+			'/sync',
+			array(
+				'methods'             => WP_REST_Server::CREATABLE,
+				'callback'            => array( $this, 'handle_sync' ),
+				'permission_callback' => array( $this, 'authorize_sync' ),
+				'args'                => array(
+					/*
+					 * Both are labels, never instructions. Neither can change
+					 * what this site fetches — the URL is this site's own
+					 * setting — and that is the only reason they are safe to
+					 * accept from a caller at all.
+					 */
+					'expectedFeed'    => array(
+						'type'              => 'string',
+						'required'          => false,
+						'default'           => '',
+						// Cast, like the four other preg_replace sanitizers in
+						// this codebase. preg_replace() returns string|null —
+						// only on a backtrack limit or malformed UTF-8, but the
+						// declared type here is 'string' and a null stored
+						// against it is a lie the next reader inherits.
+						'sanitize_callback' => static fn( $v ) => (string) preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $v ) ),
+					),
+					'expectedVersion' => array(
+						'type'     => 'string',
+						'required' => false,
+						'default'  => '',
 					),
 				),
 			)
@@ -173,9 +234,186 @@ final class ADVTN_REST {
 	 * @return WP_REST_Response
 	 */
 	public function handle_feed_fetch( WP_REST_Request $request ): WP_REST_Response {
-		$result = advtn()->manual_feed()->fetch( (bool) $request->get_param( 'force' ) );
+		$result = advtn()->manual_feed()->fetch( (bool) $request->get_param( 'force' ), 'rest' );
 
 		return new WP_REST_Response( $result, 'failed' === $result['status'] ? 502 : 200 );
+	}
+
+	/**
+	 * Make this site re-read its feed now.
+	 *
+	 * `fetch( true )` skips the due-check *and* the stored ETag. The second is
+	 * not a convenience: If-None-Match is this site asserting "I already hold
+	 * version N", which is exactly the assertion somebody forcing a fetch has
+	 * stopped believing.
+	 *
+	 * **The retry is scheduled, not slept through.** The far end's serving cache
+	 * is 60 seconds with no invalidation available, so a push fired just after a
+	 * save hands this site the previous version. Waiting 60 seconds inside the
+	 * request would put the response past a default nginx `fastcgi_read_timeout`
+	 * of 60 s — the pusher would read a 504 as a failed push and prune a site
+	 * that had synced correctly. Scheduling answers immediately and lets this
+	 * site repair itself.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return WP_REST_Response
+	 */
+	public function handle_sync( WP_REST_Request $request ): WP_REST_Response {
+		$result = advtn()->manual_feed()->fetch( true, 'sync' );
+
+		$retry_queued = false;
+		$retry_at     = 0;
+
+		if ( ADVTN_Manual_Feed::retry_needed(
+			(string) $result['feed'],
+			(string) $request->get_param( 'expectedFeed' ),
+			(string) $result['version'],
+			(string) $request->get_param( 'expectedVersion' )
+		) ) {
+			/*
+			 * Through ADVTN_Scheduler, not `wp_schedule_single_event()`.
+			 *
+			 * Every other deferred unit of work in this plugin goes through it,
+			 * and it prefers Action Scheduler, which is what puts the pending
+			 * retry in `pending_summary()` — the Diagnostics queue panel and
+			 * `status_payload()['pending_queue']`. An operator asking "the push
+			 * said stale, did the retry run?" had nowhere to look before.
+			 *
+			 * The pending check has to go through the same class for the same
+			 * reason. Where Action Scheduler is available `schedule_single()`
+			 * queues there and WP-Cron knows nothing about it, so the old bare
+			 * `wp_next_scheduled()` guard would answer "nothing pending" on
+			 * every push and queue without limit — the opposite of the property
+			 * it was written to hold.
+			 */
+			$scheduler = advtn()->scheduler();
+			$retry_at  = $scheduler->next_scheduled( ADVTN_Manual_Feed::HOOK_RETRY );
+
+			// Exactly one, and only if nothing is already queued. A retry that
+			// retried would turn a version that never moves into a site that
+			// never stops fetching.
+			if ( 0 === $retry_at ) {
+				$scheduler->schedule_single( time() + self::SYNC_RETRY_DELAY, ADVTN_Manual_Feed::HOOK_RETRY );
+				$retry_at = $scheduler->next_scheduled( ADVTN_Manual_Feed::HOOK_RETRY );
+			}
+
+			// Reported, not assumed. This used to be a flat `true` set outside
+			// the guard, so the answer was identical whether a retry had just
+			// been queued, was queued and will run, was queued and never will,
+			// or had failed to queue at all. `retry_at` tells those apart: a
+			// timestamp in the past is a retry that is overdue, which is what a
+			// host with a blocked loopback looks like, and a stale site that
+			// promises a repair forever was how that state stayed invisible.
+			$retry_queued     = $retry_at > 0;
+			$result['status'] = 'stale';
+		}
+
+		return new WP_REST_Response(
+			array(
+				'status'       => $result['status'],
+				'feed'         => $result['feed'],
+				'version'      => $result['version'],
+				'count'        => $result['count'],
+				'skipped'      => $result['skipped'],
+				'retry_queued' => $retry_queued,
+				'retry_at'     => $retry_at,
+			),
+			'failed' === $result['status'] ? 502 : 200
+		);
+	}
+
+	/**
+	 * Sync-key check for /sync.
+	 *
+	 * The rate limit runs first and unconditionally, so a caller cannot use the
+	 * endpoint as an oracle that answers faster when the key is absent than when
+	 * it is merely wrong.
+	 *
+	 * One refusal for every reason. "No key configured", "no header sent" and
+	 * "wrong key" are the same answer, because distinguishing them tells an
+	 * unauthenticated caller which sites have been pushed to before.
+	 *
+	 * @param WP_REST_Request $request Request.
+	 * @return true|WP_Error
+	 */
+	public function authorize_sync( WP_REST_Request $request ) {
+		/*
+		 * First, and before the header is even read. The cost of that is real
+		 * and is accepted here rather than left implicit: the bucket is per
+		 * endpoint and not per caller, so every refused anonymous probe spends
+		 * a slot a legitimate push needs, and 30 requests per 300 seconds from
+		 * one client is enough to keep it spent.
+		 *
+		 * It runs first anyway because moving it after the key check turns the
+		 * endpoint into a timing oracle that answers faster for a site that has
+		 * no key than for one whose key is merely wrong — which is exactly the
+		 * map of "which sites have been pushed to" that the single refusal
+		 * message exists to withhold. Making the bucket per caller would fix
+		 * both, but a caller cannot be identified without something it cannot
+		 * forge, and choosing that is a spec decision rather than a fix.
+		 *
+		 * What is done about it here is to make the state legible:
+		 * `record_sync()` below counts refusals where an operator can see them.
+		 */
+		$rate = ADVTN_HMAC::rate_limit( 'sync' );
+
+		if ( is_wp_error( $rate ) ) {
+			return $rate;
+		}
+
+		$presented = (string) $request->get_header( ADVTN_Sync_Key::HEADER );
+
+		if ( ! ADVTN_Sync_Key::matches(
+			$presented,
+			$this->settings->get_string( 'sync_key' ),
+			$this->settings->get_string( 'sync_key_previous' )
+		) ) {
+			$this->record_sync_refusal();
+
+			return new WP_Error(
+				'advtn_sync_refused',
+				__( 'This request was not accepted.', 'trending-now' ),
+				array( 'status' => 401 )
+			);
+		}
+
+		advtn()->manual_feed()->record_sync( true );
+
+		return true;
+	}
+
+	/**
+	 * Note a refused push, and log it if it opens a new burst.
+	 *
+	 * The marker is written every time; the log line is throttled. An
+	 * internet-facing route that logged every refusal would let an
+	 * unauthenticated caller evict the whole 200-row ring, so the count in the
+	 * state option carries the magnitude and the log carries the fact.
+	 *
+	 * The refusal itself is unchanged by this: same message, same 401, no
+	 * branch on which reason it was. One refusal for every reason is a property
+	 * of the *response*, and nothing here reaches the response.
+	 *
+	 * @return void
+	 */
+	private function record_sync_refusal(): void {
+		$feed  = advtn()->manual_feed();
+		$state = $feed->state();
+
+		$log = ADVTN_Manual_Feed::refusal_is_new_burst(
+			(string) ( $state['last_sync_refused_at'] ?? '' ),
+			time(),
+			self::SYNC_REFUSAL_LOG_INTERVAL
+		);
+
+		$feed->record_sync( false );
+
+		if ( $log ) {
+			// Matches ADVTN_HMAC::verify()'s line for the signed routes. The
+			// route left no trace at all when probed, where every other
+			// authenticated route in this plugin left one.
+			ADVTN_Logger::log( 'warning', 'Refused a push to /sync: the presented key did not match.' );
+		}
 	}
 
 	/**

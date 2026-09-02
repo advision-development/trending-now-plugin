@@ -5,6 +5,88 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] — 2026-09-02
+
+### Added
+
+- **A site can be told to fetch now.** `POST /wp-json/advtn/v1/sync` makes this site
+  re-read its curated feed immediately instead of waiting up to six hours. It calls the
+  same `fetch( true )` the *Fetch now* button does, down the same path, through the same
+  parser — the push carries no links, only the instruction to go and get them.
+
+  **It has its own credential**, `advtn_sync_key`, sent in the `X-ADVTN-Sync-Key` header
+  and verified in constant time. Deliberately not `ingest_secret`, which also authorizes
+  `/ingest` and `/status`: a central store of those would be able to trigger ingests
+  across the whole network and read every site's source configuration. What a leaked sync
+  key buys is one site re-reading the feed it re-reads every six hours anyway.
+
+  **Nothing is distributed.** This site invents the key the first time it fetches and
+  sends it on the request it was already making, so the feed learns it by being called.
+  Replacing it is a button on **Curated links → Feed subscription**, beside the row that
+  says whether a key is in place and when it was last presented; the old value keeps
+  working until the feed sees the new one, because otherwise replacing a key you suspected
+  had leaked would mean waiting six hours for it to take effect.
+
+- **The answer says which feed actually arrived**, read out of the payload rather than
+  echoed from the request. A site that has moved to a different feed can then be told
+  apart from one that refreshed, which an echoed value could never do.
+
+- **A fetch says why it happened.** `&trigger=sync` goes out with a pushed fetch, from a
+  closed list of names. It is a claim this site makes about itself and it is a label on a
+  log row, not an authorization.
+
+### Changed
+
+- **A feed fetch that changed nothing no longer rebuilds the selection.** It used to,
+  every time, and `build_and_commit()` is not a read: it stamps `times_shown` and sets the
+  write-once `first_shown_at` on every selected row. So a fetch nobody looked at started
+  each item's exposure window at a moment no visitor saw it, and on a quiet site the
+  guaranteed window could expire before a crawler ever arrived — the one failure the floor
+  exists to prevent. This affects the six-hourly timer as well as a push; both go through
+  the same call site. An unchanged fetch now skips the rebuild and the two cache purges,
+  and "unchanged" means the list a visitor would be served, not the response bytes.
+
+- **The feed request follows no redirects.** It carries the shared feed token *and* this
+  site's sync key, and WordPress re-sends the whole header set on every hop including a
+  cross-host one — so a feed URL that lapses, or points at a shortener or a reconfigured
+  proxy, would hand a third party a token that reads every feed in the network. A 3xx is
+  now reported as a configuration error naming the target host, and the stored links are
+  left untouched. **If a site's feed URL legitimately redirects — `http://` against a host
+  that upgrades to `https://` is the likely one — put the final address in the field.**
+
+- **The Feed subscription tab shows when the push credential was last presented**, and
+  counts refusals. There was previously no way to tell "the feed holds a stale key" from
+  "the feed has never pushed this site" from "somebody is probing the route".
+
+### Security
+
+- **`sync_key` was not in `ADVTN_Logger`'s scrub list.** Nothing logged it, but the next
+  diagnostic somebody added would have written it in plaintext into `advtn_log`, which
+  renders on the Diagnostics tab and is served by `GET /status`. The list now matches
+  `_key`.
+
+- **The second key comparison in `ADVTN_Sync_Key::matches()` was being skipped.** It sat
+  behind `is_wellformed( $previous ) &&`, and `&&` short-circuits, so on every site that
+  has never replaced its key only one of the two comparisons ran. Both now run
+  unconditionally. Note that constant-time comparison here is held by review and not by
+  any test — timing is not unit-testable, and the docblock now says so rather than
+  claiming otherwise.
+
+### Notes for anybody debugging this later
+
+- **The one retry is scheduled, not slept through.** When a pushed fetch arrives behind
+  the version the pusher expected — the serving cache on the other end is 60 seconds with
+  no invalidation available — this site queues one more fetch a minute out and answers
+  immediately. Sleeping inside the request would put the response past a default nginx
+  `fastcgi_read_timeout` of 60 seconds, and the pusher would read that `504` as a failed
+  push and drop this site from its list for being slow.
+
+  It is queued through `ADVTN_Scheduler` rather than `wp_schedule_single_event()`, so it
+  shows up in the Diagnostics queue panel and in `status_payload()['pending_queue']`, and
+  the response carries `retry_at`. A timestamp in the past means the retry is overdue —
+  which is what a host with a blocked loopback looks like, and previously that state
+  answered identically to a healthy one and promised a repair forever.
+
 ## [1.3.0] — 2026-09-01
 
 ### Security
