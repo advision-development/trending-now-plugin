@@ -480,7 +480,16 @@ final class ADVTN_Renderer {
 			return false;
 		}
 
-		if ( self::is_page_output( did_action( 'wp_head' ), doing_action( 'wp_head' ) ) ) {
+		// If the hook state cannot be read, treat the render as not page
+		// output: it carries the stylesheet and leaves it for the next one.
+		// The worst case is a repeated <style>, never a missing one.
+		try {
+			$is_page = self::is_page_output( (int) did_action( 'wp_head' ), (bool) doing_action( 'wp_head' ) );
+		} catch ( \Throwable $e ) {
+			$is_page = false;
+		}
+
+		if ( $is_page ) {
 			self::$css_emitted = true;
 		}
 
@@ -573,7 +582,18 @@ final class ADVTN_Renderer {
 		 * @param string $css    Generated CSS.
 		 * @param string $prefix Class prefix.
 		 */
-		$css = trim( (string) apply_filters( 'advtn_inline_css', $css, $p ) );
+		// The filter is somebody else's code running on every pageview that
+		// shows the widget. A callback that throws, or hands back something
+		// that is not a string, costs the page its customization and nothing
+		// more: the stock stylesheet goes out instead. Not logged, because
+		// the log is an option and this would write it on every pageview.
+		try {
+			$filtered = apply_filters( 'advtn_inline_css', $css, $p );
+		} catch ( \Throwable $e ) {
+			$filtered = $css;
+		}
+
+		$css = trim( is_string( $filtered ) ? $filtered : $css );
 
 		// Filtering this to '' suppresses the tag entirely, for anyone who
 		// would rather enqueue assets/css/trending-now.css themselves.

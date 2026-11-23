@@ -1750,6 +1750,50 @@ advtn_assert_same(
 	'css: with no wp_head every render carries the stylesheet'
 );
 
+// advtn_inline_css is somebody else's code running inside every pageview that
+// shows the widget. A filter that throws must cost the page its customization,
+// not the page.
+$GLOBALS['advtn_test_filters']['advtn_inline_css'] = static function () {
+	throw new RuntimeException( 'a theme filter broke' );
+};
+$advtn_emitted->setValue( null, false );
+$advtn_threw = null;
+try {
+	$advtn_survived = advtn_emit_has_css( 1, '' );
+} catch ( \Throwable $advtn_e ) {
+	$advtn_threw    = get_class( $advtn_e );
+	$advtn_survived = false;
+}
+advtn_assert_same(
+	array( null, true ),
+	array( $advtn_threw, $advtn_survived ),
+	'css: a throwing advtn_inline_css filter falls back to the stock stylesheet'
+);
+
+// A filter returning something that is not a string would print "Array".
+$GLOBALS['advtn_test_filters']['advtn_inline_css'] = static function () {
+	return array( 'not', 'css' );
+};
+$advtn_emitted->setValue( null, false );
+$GLOBALS['advtn_test_actions'] = array(
+	'did'   => array( 'wp_head' => 1 ),
+	'doing' => '',
+);
+advtn_assert_same(
+	true,
+	false !== strpos( (string) $advtn_emit->invoke( $advtn_renderer, $advtn_blob ), '<style id="advtn-inline-css">.advtn{' ),
+	'css: a non-string from the filter falls back to the stock stylesheet'
+);
+
+// '' is still the documented way to switch the tag off.
+$GLOBALS['advtn_test_filters']['advtn_inline_css'] = static function () {
+	return '';
+};
+$advtn_emitted->setValue( null, false );
+advtn_assert_same( false, advtn_emit_has_css( 1, '' ), 'css: filtering to an empty string still suppresses the tag' );
+
+unset( $GLOBALS['advtn_test_filters']['advtn_inline_css'] );
+
 $GLOBALS['advtn_test_actions'] = array(
 	'did'   => array(),
 	'doing' => '',

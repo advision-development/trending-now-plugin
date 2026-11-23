@@ -23,6 +23,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   archive's `inline_css_once()`. The cost is a repeated `<style>` where a block theme shows
   two widgets on one page; the alternative was a widget with none.
 
+- **A throwing `advtn_inline_css` filter no longer takes the page down.** The filter is
+  third-party code running on every pageview that shows the widget. A callback that throws
+  or returns something other than a string now costs the page its customization only: the
+  stock stylesheet goes out instead. Filtering to `''` still suppresses the tag.
+
 ## [1.4.0] — 2026-09-02
 
 ### Added

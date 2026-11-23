@@ -74,14 +74,18 @@ if ( ! function_exists( 'home_url' ) ) {
 
 if ( ! function_exists( 'apply_filters' ) ) {
 	/**
-	 * Stub of apply_filters(): no filters registered in this harness.
+	 * Stub of apply_filters(). A test registers one callback per tag in
+	 * $GLOBALS['advtn_test_filters']; with none, the value passes through.
 	 *
-	 * @param string $tag   Filter name.
-	 * @param mixed  $value Value to filter.
+	 * @param string $tag     Filter name.
+	 * @param mixed  $value   Value to filter.
+	 * @param mixed  ...$args Extra arguments handed to the callback.
 	 * @return mixed
 	 */
-	function apply_filters( string $tag, $value ) {
-		return $value;
+	function apply_filters( string $tag, $value, ...$args ) {
+		$callback = $GLOBALS['advtn_test_filters'][ $tag ] ?? null;
+
+		return is_callable( $callback ) ? $callback( $value, ...$args ) : $value;
 	}
 }
 
