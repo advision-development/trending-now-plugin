@@ -1676,6 +1676,85 @@ advtn_assert_same(
 	'commit patch: a fact cannot displace the clock the patch is dated by'
 );
 
+/* -------------------------------------------------------------------------
+ * ADVTN_Renderer: the inline stylesheet goes out with the copy that is shown
+ * ---------------------------------------------------------------------- */
+
+// The decision, alone. Only a render after wp_head has finished can be the
+// one the page prints: anything earlier is somebody building output to read,
+// not to show — an SEO plugin's description, a builder's pre-pass.
+advtn_assert_same( false, ADVTN_Renderer::is_page_output( 0, false ), 'css: a render before wp_head is not page output' );
+advtn_assert_same( false, ADVTN_Renderer::is_page_output( 1, true ), 'css: a render inside wp_head is not page output' );
+advtn_assert_same( true, ADVTN_Renderer::is_page_output( 1, false ), 'css: a render after wp_head is page output' );
+
+$advtn_renderer = new ADVTN_Renderer( new ADVTN_Settings(), new ADVTN_Repository() );
+$advtn_emit     = new ReflectionMethod( 'ADVTN_Renderer', 'emit' );
+$advtn_emitted  = new ReflectionProperty( 'ADVTN_Renderer', 'css_emitted' );
+if ( PHP_VERSION_ID < 80100 ) {
+	$advtn_emit->setAccessible( true );
+	$advtn_emitted->setAccessible( true );
+}
+$advtn_blob = '<!--advtn:css--><section class="advtn">x</section>';
+
+/**
+ * Emit the test blob with the hook state given.
+ *
+ * @param int    $head_runs How many times wp_head has started.
+ * @param string $doing     The hook running now, or ''.
+ * @return bool Whether the output carried the stylesheet.
+ */
+function advtn_emit_has_css( int $head_runs, string $doing ): bool {
+	global $advtn_renderer, $advtn_emit, $advtn_blob;
+
+	$GLOBALS['advtn_test_actions'] = array(
+		'did'   => array( 'wp_head' => $head_runs ),
+		'doing' => $doing,
+	);
+
+	return false !== strpos( (string) $advtn_emit->invoke( $advtn_renderer, $advtn_blob ), '<style id="advtn-inline-css">' );
+}
+
+// THE case: AIOSEO renders the content inside wp_head to build a description
+// and throws it away. That copy must not use up the stylesheet.
+$advtn_emitted->setValue( null, false );
+$advtn_head_copy = advtn_emit_has_css( 1, 'wp_head' );
+advtn_assert_same(
+	array( true, true ),
+	array( $advtn_head_copy, advtn_emit_has_css( 1, '' ) ),
+	'css: a copy rendered inside wp_head does not cost the body its stylesheet'
+);
+
+// Once is still once on the page itself.
+advtn_assert_same( false, advtn_emit_has_css( 1, '' ), 'css: a second widget in the body does not repeat the stylesheet' );
+
+// The archive asks for it directly and must obey the same rule.
+$advtn_emitted->setValue( null, false );
+$GLOBALS['advtn_test_actions'] = array(
+	'did'   => array( 'wp_head' => 1 ),
+	'doing' => 'wp_head',
+);
+$advtn_renderer->inline_css_once();
+$GLOBALS['advtn_test_actions']['doing'] = '';
+advtn_assert_same(
+	true,
+	'' !== $advtn_renderer->inline_css_once(),
+	'css: inline_css_once() inside wp_head does not use up the archive stylesheet'
+);
+
+// No head at all — the builder's AJAX preview, REST, WP-CLI — is a fragment
+// shown on its own, and every one of them needs its stylesheet.
+$advtn_emitted->setValue( null, false );
+advtn_assert_same(
+	array( true, true ),
+	array( advtn_emit_has_css( 0, '' ), advtn_emit_has_css( 0, '' ) ),
+	'css: with no wp_head every render carries the stylesheet'
+);
+
+$GLOBALS['advtn_test_actions'] = array(
+	'did'   => array(),
+	'doing' => '',
+);
+
 /* ---------------------------------------------------------------------- */
 
 printf( "\n%d passed, %d failed\n", $advtn_passed, $advtn_failed );
