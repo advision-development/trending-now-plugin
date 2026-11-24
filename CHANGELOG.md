@@ -25,8 +25,10 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **A throwing `advtn_inline_css` filter no longer takes the page down.** The filter is
   third-party code running on every pageview that shows the widget. A callback that throws
-  or returns something other than a string now costs the page its customization only: the
-  stock stylesheet goes out instead. Filtering to `''` still suppresses the tag.
+  or returns something that cannot be a string (an array, a plain object) now costs the
+  page its customization only: the stock stylesheet goes out instead. Filtering to `''`,
+  `false` or `null` (`__return_false`, `__return_null`) still suppresses the tag, and
+  scalars and stringable objects are printed as before.
 
 ## [1.4.0] — 2026-09-02
 

@@ -1792,6 +1792,41 @@ $GLOBALS['advtn_test_filters']['advtn_inline_css'] = static function () {
 $advtn_emitted->setValue( null, false );
 advtn_assert_same( false, advtn_emit_has_css( 1, '' ), 'css: filtering to an empty string still suppresses the tag' );
 
+// __return_false and __return_null are the WordPress idiom for "switch this
+// off", and before the non-string guard they did, by casting to ''. They must
+// keep doing it.
+foreach ( array( 'false' => false, 'null' => null ) as $advtn_label => $advtn_off ) {
+	$GLOBALS['advtn_test_filters']['advtn_inline_css'] = static function () use ( $advtn_off ) {
+		return $advtn_off;
+	};
+	$advtn_emitted->setValue( null, false );
+	advtn_assert_same( false, advtn_emit_has_css( 1, '' ), "css: filtering to {$advtn_label} still suppresses the tag" );
+}
+
+// An object that knows how to be a string was printed before and still is.
+$GLOBALS['advtn_test_filters']['advtn_inline_css'] = static function () {
+	return new class() {
+		/**
+		 * The stylesheet.
+		 *
+		 * @return string
+		 */
+		public function __toString(): string {
+			return '.custom{color:red}';
+		}
+	};
+};
+$advtn_emitted->setValue( null, false );
+$GLOBALS['advtn_test_actions'] = array(
+	'did'   => array( 'wp_head' => 1 ),
+	'doing' => '',
+);
+advtn_assert_same(
+	true,
+	false !== strpos( (string) $advtn_emit->invoke( $advtn_renderer, $advtn_blob ), '<style id="advtn-inline-css">.custom{color:red}</style>' ),
+	'css: a stringable object from the filter is printed as before'
+);
+
 unset( $GLOBALS['advtn_test_filters']['advtn_inline_css'] );
 
 $GLOBALS['advtn_test_actions'] = array(

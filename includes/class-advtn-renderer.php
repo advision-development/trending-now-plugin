@@ -584,16 +584,28 @@ final class ADVTN_Renderer {
 		 */
 		// The filter is somebody else's code running on every pageview that
 		// shows the widget. A callback that throws, or hands back something
-		// that is not a string, costs the page its customization and nothing
-		// more: the stock stylesheet goes out instead. Not logged, because
-		// the log is an option and this would write it on every pageview.
+		// that cannot be a string (an array, a plain object), costs the page
+		// its customization and nothing more: the stock stylesheet goes out
+		// instead. Not logged, because the log is an option and this would
+		// write it on every pageview.
+		//
+		// false and null are the WordPress idiom for "switch this off"
+		// (__return_false, __return_null) and used to suppress the tag by
+		// casting to ''. They still do. Scalars and stringable objects are
+		// cast exactly as before.
 		try {
 			$filtered = apply_filters( 'advtn_inline_css', $css, $p );
 		} catch ( \Throwable $e ) {
 			$filtered = $css;
 		}
 
-		$css = trim( is_string( $filtered ) ? $filtered : $css );
+		if ( null === $filtered || false === $filtered ) {
+			$filtered = '';
+		} elseif ( ! is_scalar( $filtered ) && ! ( is_object( $filtered ) && method_exists( $filtered, '__toString' ) ) ) {
+			$filtered = $css;
+		}
+
+		$css = trim( (string) $filtered );
 
 		// Filtering this to '' suppresses the tag entirely, for anyone who
 		// would rather enqueue assets/css/trending-now.css themselves.
