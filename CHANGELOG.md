@@ -5,6 +5,31 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The widget lost its stylesheet on sites running All in One SEO.** The inline
+  stylesheet goes out once per request, and AIOSEO renders the post content inside
+  `wp_head` to write an automatic meta description. That copy took the stylesheet and was
+  thrown away, so the widget the visitor saw arrived with none — on the live page only,
+  because the page builder previews one element on its own. Seen on a Bricks site with the
+  shortcode in a Shortcode element.
+
+  A render now uses the stylesheet up only when it is the copy the page prints: after
+  `wp_head` has finished (`ADVTN_Renderer::is_page_output()`). Anything earlier — an SEO
+  plugin's description, a builder's pre-pass, a block theme rendering its template before
+  the head — still carries the stylesheet but does not spend it. The same rule covers the
+  archive's `inline_css_once()`. The cost is a repeated `<style>` where a block theme shows
+  two widgets on one page; the alternative was a widget with none.
+
+- **A throwing `advtn_inline_css` filter no longer takes the page down.** The filter is
+  third-party code running on every pageview that shows the widget. A callback that throws
+  or returns something that cannot be a string (an array, a plain object) now costs the
+  page its customization only: the stock stylesheet goes out instead. Filtering to `''`,
+  `false` or `null` (`__return_false`, `__return_null`) still suppresses the tag, and
+  scalars and stringable objects are printed as before.
+
 ## [1.4.0] — 2026-09-02
 
 ### Added

@@ -28,7 +28,8 @@ final class ADVTN_Renderer {
 	private const CSS_MARKER = '<!--advtn:css-->';
 
 	/**
-	 * Whether the inline stylesheet has already gone out this request.
+	 * Whether the inline stylesheet has already gone out with page output
+	 * this request. Renders that are not page output never set it.
 	 *
 	 * @var bool
 	 */
@@ -400,11 +401,9 @@ final class ADVTN_Renderer {
 
 		$html = $this->refresh_dates( $html );
 
-		if ( self::$css_emitted ) {
+		if ( ! $this->claim_css() ) {
 			return str_replace( self::CSS_MARKER, '', $html );
 		}
-
-		self::$css_emitted = true;
 
 		return str_replace( self::CSS_MARKER, $this->css(), $html );
 	}
@@ -461,13 +460,62 @@ final class ADVTN_Renderer {
 	 * @return string
 	 */
 	public function inline_css_once(): string {
+		return $this->claim_css() ? $this->css() : '';
+	}
+
+	/**
+	 * Whether this render should carry the stylesheet, recording it when the
+	 * render is the one the page prints.
+	 *
+	 * A render that is not page output always gets the stylesheet and never
+	 * uses it up: a copy built inside wp_head is discarded, and one built
+	 * where wp_head never runs (a builder preview, REST, WP-CLI) is shown on
+	 * its own. Duplicating a few kilobytes there is the price of never losing
+	 * them on the page. See is_page_output().
+	 *
+	 * @return bool
+	 */
+	private function claim_css(): bool {
 		if ( self::$css_emitted ) {
-			return '';
+			return false;
 		}
 
-		self::$css_emitted = true;
+		// If the hook state cannot be read, treat the render as not page
+		// output: it carries the stylesheet and leaves it for the next one.
+		// The worst case is a repeated <style>, never a missing one.
+		try {
+			$is_page = self::is_page_output( (int) did_action( 'wp_head' ), (bool) doing_action( 'wp_head' ) );
+		} catch ( \Throwable $e ) {
+			$is_page = false;
+		}
 
-		return $this->css();
+		if ( $is_page ) {
+			self::$css_emitted = true;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Whether a render happening now is the copy the page will print.
+	 *
+	 * The stylesheet goes out once per request, so the copy that takes it has
+	 * to be the one the visitor sees. Before wp_head has finished, nothing the
+	 * template prints has started: a render then is somebody building output
+	 * to read, not to show. All in One SEO renders the post content inside
+	 * wp_head to write an automatic meta description, which used the
+	 * stylesheet up on a copy that was thrown away and left the widget in the
+	 * body unstyled — on the live page only, since the builder previews one
+	 * element on its own.
+	 *
+	 * Pure so the harness can hold it; the caller reads the two hook facts.
+	 *
+	 * @param int  $head_runs did_action( 'wp_head' ): how many times it has started.
+	 * @param bool $in_head   doing_action( 'wp_head' ): whether it is running now.
+	 * @return bool
+	 */
+	public static function is_page_output( int $head_runs, bool $in_head ): bool {
+		return $head_runs > 0 && ! $in_head;
 	}
 
 	/**
@@ -534,7 +582,30 @@ final class ADVTN_Renderer {
 		 * @param string $css    Generated CSS.
 		 * @param string $prefix Class prefix.
 		 */
-		$css = trim( (string) apply_filters( 'advtn_inline_css', $css, $p ) );
+		// The filter is somebody else's code running on every pageview that
+		// shows the widget. A callback that throws, or hands back something
+		// that cannot be a string (an array, a plain object), costs the page
+		// its customization and nothing more: the stock stylesheet goes out
+		// instead. Not logged, because the log is an option and this would
+		// write it on every pageview.
+		//
+		// false and null are the WordPress idiom for "switch this off"
+		// (__return_false, __return_null) and used to suppress the tag by
+		// casting to ''. They still do. Scalars and stringable objects are
+		// cast exactly as before.
+		try {
+			$filtered = apply_filters( 'advtn_inline_css', $css, $p );
+		} catch ( \Throwable $e ) {
+			$filtered = $css;
+		}
+
+		if ( null === $filtered || false === $filtered ) {
+			$filtered = '';
+		} elseif ( ! is_scalar( $filtered ) && ! ( is_object( $filtered ) && method_exists( $filtered, '__toString' ) ) ) {
+			$filtered = $css;
+		}
+
+		$css = trim( (string) $filtered );
 
 		// Filtering this to '' suppresses the tag entirely, for anyone who
 		// would rather enqueue assets/css/trending-now.css themselves.

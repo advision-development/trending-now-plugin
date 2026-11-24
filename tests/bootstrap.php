@@ -74,14 +74,18 @@ if ( ! function_exists( 'home_url' ) ) {
 
 if ( ! function_exists( 'apply_filters' ) ) {
 	/**
-	 * Stub of apply_filters(): no filters registered in this harness.
+	 * Stub of apply_filters(). A test registers one callback per tag in
+	 * $GLOBALS['advtn_test_filters']; with none, the value passes through.
 	 *
-	 * @param string $tag   Filter name.
-	 * @param mixed  $value Value to filter.
+	 * @param string $tag     Filter name.
+	 * @param mixed  $value   Value to filter.
+	 * @param mixed  ...$args Extra arguments handed to the callback.
 	 * @return mixed
 	 */
-	function apply_filters( string $tag, $value ) {
-		return $value;
+	function apply_filters( string $tag, $value, ...$args ) {
+		$callback = $GLOBALS['advtn_test_filters'][ $tag ] ?? null;
+
+		return is_callable( $callback ) ? $callback( $value, ...$args ) : $value;
 	}
 }
 
@@ -236,6 +240,52 @@ if ( ! function_exists( 'update_option' ) ) {
 	}
 }
 
+/*
+ * Hook state for the renderer's stylesheet decision. A test sets
+ * $GLOBALS['advtn_test_actions'] to say which hooks have run and which one
+ * is running, the two facts did_action() and doing_action() report.
+ */
+$GLOBALS['advtn_test_actions'] = array(
+	'did'   => array(),
+	'doing' => '',
+);
+
+if ( ! function_exists( 'esc_attr' ) ) {
+	/**
+	 * Stub of esc_attr().
+	 *
+	 * @param string $text Raw value.
+	 * @return string
+	 */
+	function esc_attr( string $text ): string {
+		return htmlspecialchars( $text, ENT_QUOTES, 'UTF-8' );
+	}
+}
+
+if ( ! function_exists( 'did_action' ) ) {
+	/**
+	 * Stub of did_action(): how many times a hook has started.
+	 *
+	 * @param string $hook_name Hook name.
+	 * @return int
+	 */
+	function did_action( string $hook_name ): int {
+		return (int) ( $GLOBALS['advtn_test_actions']['did'][ $hook_name ] ?? 0 );
+	}
+}
+
+if ( ! function_exists( 'doing_action' ) ) {
+	/**
+	 * Stub of doing_action(): whether a hook is running right now.
+	 *
+	 * @param string|null $hook_name Hook name.
+	 * @return bool
+	 */
+	function doing_action( $hook_name = null ): bool {
+		return $hook_name === $GLOBALS['advtn_test_actions']['doing'];
+	}
+}
+
 require_once dirname( __DIR__ ) . '/includes/class-advtn-url.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-path-match.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-attempts.php';
@@ -252,3 +302,4 @@ require_once dirname( __DIR__ ) . '/includes/class-advtn-updater.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-repository.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-manual.php';
 require_once dirname( __DIR__ ) . '/includes/class-advtn-archive.php';
+require_once dirname( __DIR__ ) . '/includes/class-advtn-renderer.php';
